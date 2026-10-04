@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers (keep the admin email in sync with lib/config.ts) ----
+    function signedIn() { return request.auth != null; }
+    function realUser() { return signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
+    function isAdmin() {
+      return realUser() && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['a7mdelnagar297@gmail.com'];
+    }
+    function isApprovedMerchant() {
+      return realUser() && exists(/databases/$(database)/documents/merchants/$(request.auth.uid))
+        && get(/databases/$(database)/documents/merchants/$(request.auth.uid)).data.status == 'approved';
+    }
+    function only(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    // ---- public catalog ----
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /products/{id} {
+      allow read: if resource.data.status == 'active'
+        || isAdmin()
+        || (realUser() && resource.data.merchantId == request.auth.uid);
+      allow create: if isAdmin()
+        || (isApprovedMerchant()
+            && request.resource.data.merchantId == request.auth.uid
+            && request.resource.data.ownerUid == request.auth.uid
+            && request.resource.data.status == 'active');
+      allow update: if isAdmin()
+        || (realUser() && resource.data.merchantId == request.auth.uid
+            && request.resource.data.merchantId == resource.data.merchantId
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && (request.resource.data.status == resource.data.status
+                || (resource.data.status != 'pending' && request.resource.data.status in ['active', 'hidden'])));
+      allow delete: if isAdmin() || (realUser() && resource.data.merchantId == request.auth.uid);
+    }
+
+    match /merchants/{uid} {
+      allow read: if resource.data.status == 'approved' || isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create: if realUser() && request.auth.uid == uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.verified == false
+        && request.resource.data.ownerUid == uid;
+      allow update: if isAdmin()
+        || (realUser() && request.auth.uid == uid && only(['name', 'phone', 'governorate', 'city', 'about', 'regNo', 'taxNo', 'email']));
+      allow delete: if isAdmin();
+    }
+
+    // ---- carts ----
+    match /carts/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ---- orders (one document per merchant per checkout) ----
+    match /orders/{id} {
+      allow read: if isAdmin() || (signedIn() && (resource.data.userId == request.auth.uid || resource.data.merchantId == request.auth.uid));
+      allow create: if realUser() && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'new';
+      allow update: if isAdmin()
+        || (realUser() && resource.data.merchantId == request.auth.uid && only(['status', 'trackingNo', 'updatedAt']))
+        || (realUser() && resource.data.userId == request.auth.uid && resource.data.status == 'new'
+            && request.resource.data.status == 'cancelled' && only(['status', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    // ---- RFQs and offers ----
+    match /rfqs/{id} {
+      allow read: if isAdmin() || (realUser() && (resource.data.userId == request.auth.uid || isApprovedMerchant()));
+      allow create: if realUser() && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'open';
+      allow update: if isAdmin() || (realUser() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    match /offers/{id} {
+      allow read: if isAdmin() || (signedIn() && (resource.data.rfqOwnerId == request.auth.uid || resource.data.merchantId == request.auth.uid));
+      allow create: if isApprovedMerchant() && request.resource.data.merchantId == request.auth.uid && request.resource.data.status == 'pending';
+      allow update: if isAdmin() || (realUser() && resource.data.rfqOwnerId == request.auth.uid && only(['status', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+  }
+}
