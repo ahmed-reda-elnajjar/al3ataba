@@ -28,7 +28,7 @@ i.ph{font-size:22px;vertical-align:middle}
 
 /* header */
 .top{background:var(--pm);color:#fff;text-align:center;padding:6px 12px;font-size:14px}
-.hdr{background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:40;padding:10px 16px}
+.hdr{background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:90;padding:10px 16px}
 .hdr .in-row{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:16px}
 .logo{display:flex;flex-direction:column;line-height:1;color:var(--pm);flex:none}
 .logo b{font:700 24px Alexandria,sans-serif}.logo small{font:600 8px sans-serif;letter-spacing:.38em;color:var(--pa)}
@@ -143,3 +143,23 @@ a.card:hover{border-color:var(--pa)}
  .wa{inset-inline-start:10px;bottom:calc(76px + env(safe-area-inset-bottom));padding:12px}
  select.in{max-width:100%}
 }
+
+/* mobile drawer */
+.burger{all:unset;cursor:pointer;display:grid;place-items:center;width:42px;height:42px;border-radius:10px;color:var(--pm);flex:none}
+.burger:hover{background:var(--mint)}.burger i{font-size:28px}
+@media(min-width:800px){.burger{display:none}}
+.dr{position:fixed;inset:0;z-index:80;pointer-events:none;visibility:hidden}
+.dr.open{pointer-events:auto;visibility:visible}
+.dr-bg{position:absolute;inset:0;background:#0008;opacity:0;transition:opacity .2s}
+.dr.open .dr-bg{opacity:1}
+.dr-box{position:absolute;top:0;bottom:0;right:0;width:min(86vw,340px);background:#fff;padding:14px 14px calc(20px + env(safe-area-inset-bottom));overflow-y:auto;transform:translateX(100%);transition:transform .22s;direction:rtl;box-shadow:-4px 0 24px #0003}
+.dr.open .dr-box{transform:none}
+.dr-x{all:unset;cursor:pointer;width:40px;height:40px;display:grid;place-items:center;border-radius:50%}
+.dr-x:hover{background:var(--mint)}
+.dr-tabs{display:flex;border-bottom:2px solid var(--bd);margin-bottom:8px}
+.dr-tabs button{all:unset;cursor:pointer;flex:1;text-align:center;padding:12px 0;font-weight:600;color:var(--mu);border-bottom:3px solid transparent;margin-bottom:-2px}
+.dr-tabs button.on{color:var(--pm);border-bottom-color:var(--pa)}
+.dl{all:unset;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;font-size:16px;color:var(--tx);width:100%}
+.dl:hover,.dl:active{background:var(--mint)}.dl i{color:var(--pm);font-size:22px}
+.dr-sep{height:1px;background:var(--bd);margin:8px 0}
+.dr-h{padding:4px 12px;color:var(--mu);font-size:14px}

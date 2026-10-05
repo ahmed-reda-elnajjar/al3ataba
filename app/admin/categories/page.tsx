@@ -23,6 +23,17 @@ export default function AdminCategories() {
     await b.commit(); reload();
   };
   const rename = async (id: string, v: string) => { if (v.trim()) await updateDoc(doc(dbI(), "categories", id), { name: v.trim() }); };
+  const move = async (i: number, d: number) => {
+    const list = data ?? [];
+    const j = i + d;
+    if (j < 0 || j >= list.length) return;
+    const b = writeBatch(dbI());
+    list.forEach((c, k) => {
+      const pos = k === i ? j : k === j ? i : k;
+      if (pos !== k || c.order !== k + 1) b.update(doc(dbI(), "categories", c.id), { order: pos + 1 });
+    });
+    await b.commit(); reload();
+  };
   const del = async (id: string, n: string) => { if (confirm(`حذف قسم "${n}"؟ المنتجات اللي فيه هتفضل موجودة.`)) { await deleteDoc(doc(dbI(), "categories", id)); reload(); } };
   return (
     <>
@@ -40,10 +51,12 @@ export default function AdminCategories() {
         <div className="card col"><b>مفيش أقسام لسه</b><small>تقدر تضيف الأقسام الأساسية بضغطة واحدة وتعدّلها بعدين.</small><button className="btn" style={{ alignSelf: "flex-start" }} onClick={seed}>إضافة الأقسام الأساسية</button></div>
       ) : (
         <div className="col">
-          {data.map((c) => (
+          {data.map((c, i) => (
             <div key={c.id} className="card row">
               <i className={`ph ${c.icon}`} style={{ color: "var(--pm)" }} />
               <input className="in sp" defaultValue={c.name} onBlur={(e) => e.target.value !== c.name && rename(c.id, e.target.value)} />
+              <button className="btn o sm2" disabled={i === 0} onClick={() => move(i, -1)} aria-label="لفوق"><i className="ph ph-arrow-up" /></button>
+              <button className="btn o sm2" disabled={i === data.length - 1} onClick={() => move(i, 1)} aria-label="لتحت"><i className="ph ph-arrow-down" /></button>
               <button className="btn r sm2" onClick={() => del(c.id, c.name)}>حذف</button>
             </div>
           ))}
