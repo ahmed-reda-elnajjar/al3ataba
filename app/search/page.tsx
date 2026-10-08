@@ -23,6 +23,7 @@ function Results() {
   const [mie, setMie] = useState(false);
   const [logo, setLogo] = useState(false);
   const [sort, setSort] = useState("new");
+  const [showF, setShowF] = useState(false);
   const { data, loading } = useAsync(async () => {
     const [products, cats, merchants] = await Promise.all([listActiveProducts(), listCategories(), listApprovedMerchants()]);
     return { products, cats, verified: new Set(merchants.filter((m) => m.verified).map((m) => m.id)) };
@@ -48,6 +49,7 @@ function Results() {
     });
     if (sort === "cheap") a = [...a].sort((x, y) => priceRange(x)[0] - priceRange(y)[0]);
     if (sort === "moq") a = [...a].sort((x, y) => x.moq - y.moq);
+    if (sort === "high") a = [...a].sort((x, y) => priceRange(y)[1] - priceRange(x)[1]);
     return a;
   }, [data, q, cat, gov, min, max, moq, vOnly, cod, mie, logo, sort]);
 
@@ -68,22 +70,30 @@ function Results() {
     </div>
   );
 
+  const go = (c: string) => router.push(`/search?${new URLSearchParams({ ...(q ? { q } : {}), ...(c ? { cat: c } : {}) })}`);
   return (
     <div className="wc">
-      <div className="row" style={{ alignItems: "flex-end" }}>
-        <div className="sp"><h2>{q ? `نتائج: ${q}` : catName || "كل المنتجات"}</h2><small>{loading ? "…" : `${list.length} منتج`}</small></div>
-        <select className="in" style={{ width: "auto", minWidth: 120, maxWidth: 150, flex: "none" }} value={sort} onChange={(e) => setSort(e.target.value)} aria-label="الترتيب">
-          <option value="new">الأحدث</option><option value="cheap">الأرخص</option><option value="moq">أقل كمية للطلب</option>
-        </select>
+      <div className="row" style={{ marginBottom: 12 }}>
+        <div className="sp"><h1 style={{ fontSize: 22 }}>{q ? `نتائج: ${q}` : catName || "كل المنتجات"}</h1><small>{loading ? "…" : `${list.length} منتج`}</small></div>
+        <button className={`ico sm${showF ? " on" : ""}`} style={{ width: 44, height: 44, borderRadius: 12 }} onClick={() => setShowF(!showF)} aria-label="فلترة"><i className="ph ph-funnel" /></button>
       </div>
-      <details className="card sm mt"><summary style={{ cursor: "pointer", fontWeight: 600 }}>فلترة النتائج</summary><div style={{ marginTop: 12 }}>{filters}</div></details>
+      <div className="scr" style={{ marginBottom: 8 }}>
+        {[["new", "كل المنتجات"], ["cheap", "الأقل سعراً"], ["high", "الأعلى سعراً"], ["moq", "أقل كمية"]].map(([k, t]) => <button key={k} className={`chip${sort === k ? " on" : ""}`} onClick={() => setSort(k)}>{t}</button>)}
+      </div>
+      {(data?.cats.length ?? 0) > 0 && (
+        <div className="scr" style={{ marginBottom: 6 }}>
+          <button className={`chip${!cat ? " on" : ""}`} style={{ minHeight: 32, fontSize: 13 }} onClick={() => go("")}>كل الأقسام</button>
+          {data!.cats.map((c) => <button key={c.id} className={`chip${cat === c.id ? " on" : ""}`} style={{ minHeight: 32, fontSize: 13 }} onClick={() => go(c.id)}>{c.name}</button>)}
+        </div>
+      )}
+      {showF && <div className="card sm mt">{filters}</div>}
       <div className="row mt" style={{ alignItems: "flex-start", gap: 24 }}>
-        <aside className="card hm" style={{ width: 270, flex: "none", flexDirection: "column" }}>{filters}</aside>
+        <aside className="card hm" style={{ width: 270, flex: "none", flexDirection: "column" }}><b style={{ marginBottom: 10 }}>فلترة النتائج</b>{filters}</aside>
         <div className="sp">
           {loading ? <Loading rows={3} /> : list.length ? (
-            <div className="grid" style={st("--m:2;--d:3")}>{list.map((p) => <ProductCard key={p.id} p={p} verified={data?.verified.has(p.merchantId)} />)}</div>
+            <div className="grid" style={st("--m:2;--d:4")}>{list.map((p) => <ProductCard key={p.id} p={p} verified={data?.verified.has(p.merchantId)} />)}</div>
           ) : (
-            <Empty icon="ph-magnifying-glass" title="مفيش نتايج مطابقة" sub="جرّب كلمة تانية أو شيل بعض الفلاتر، أو اطلب عرض سعر والتجار يدوروا لك."><Link href="/rfq" className="btn">اطلب عرض سعر</Link></Empty>
+            <Empty icon="ph-magnifying-glass" title="مفيش نتايج مطابقة" sub="جرّب كلمة تانية أو شيل بعض الفلاتر، أو اطلب المنتج والتجار يدوروا لك."><Link href="/rfq" className="btn">اطلب منتج</Link></Empty>
           )}
         </div>
       </div>

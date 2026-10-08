@@ -1,7 +1,9 @@
 "use client";
 import Link from "next/link";
 import type { Product } from "@/lib/types";
-import { rangeText } from "@/lib/pricing";
+import { priceFor, rangeText } from "@/lib/pricing";
+import { useApp } from "@/lib/providers";
+import { useFavs } from "@/lib/favs";
 
 export function Img({ src, ic = "ph-image", ratio = 1, className = "", style }: { src?: string; ic?: string; ratio?: number; className?: string; style?: React.CSSProperties }) {
   return (
@@ -12,19 +14,27 @@ export function Img({ src, ic = "ph-image", ratio = 1, className = "", style }: 
 }
 
 export function ProductCard({ p, verified }: { p: Product; verified?: boolean }) {
+  const { add, items } = useApp();
+  const favs = useFavs();
+  const inCart = items.some((i) => i.productId === p.id);
+  const quick = () => add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: p.moq, price: priceFor(p.tiers, p.moq), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod });
+  const fav = favs.has(p.id);
   return (
-    <Link href={`/product/${p.id}`} className="pc">
-      <Img src={p.images?.[0]} ic="ph-package" ratio={1} />
+    <div className="pc">
+      <button className={`ico fav${fav ? " on" : ""}`} aria-label="المفضلة" onClick={() => favs.toggle(p.id)}><i className={`ph${fav ? "-fill" : ""} ph-heart`} /></button>
+      <Link href={`/product/${p.id}`}><Img src={p.images?.[0]} ic="ph-package" ratio={1} /></Link>
       <div className="bodyc">
-        <span className="nm">{p.name}</span>
-        <div className="price">{rangeText(p)} ج.م <small>/ {p.unit}</small></div>
-        <small>أقل طلب: {p.moq} {p.unit}</small>
+        <Link href={`/product/${p.id}`} className="nm">{p.name}</Link>
         <div className="row g4 wrap">
           {verified && <span className="bd v"><i className="ph ph-seal-check" />موثّق</span>}
-          <small>{p.governorate}</small>
+          <small style={{ fontSize: 12 }}>أقل طلب {p.moq} {p.unit}</small>
+        </div>
+        <div className="foot">
+          <div className="sp price">{rangeText(p)} <small>ج.م</small></div>
+          <button className="add" aria-label="أضف للسلة" title={inCart ? "في السلة" : `أضف ${p.moq} ${p.unit} للسلة`} onClick={quick}><i className={`ph ${inCart ? "ph-check" : "ph-plus"}`} /></button>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 

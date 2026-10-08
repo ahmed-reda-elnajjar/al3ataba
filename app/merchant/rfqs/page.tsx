@@ -66,7 +66,7 @@ export default function MerchantRfqs() {
             return (
               <div key={r.id} className="card col">
                 <div className="row wrap"><b className="sp">{r.product}</b><small>{dateStr(r.createdAt)}</small></div>
-                <small>{r.quantity} {r.unit} · {r.governorate} · ميزانية: {r.budget || "—"} · مطلوب قبل: {r.neededBy || "—"}</small>
+                <small>{r.kind === "retail" ? "تجزئة" : "جملة"} · {r.quantity} {r.unit} · {r.governorate} · ميزانية: {r.budget || "—"} · مطلوب قبل: {r.neededBy || "—"}</small>
                 {r.specs && <small>{r.specs}</small>}
                 {r.image && <img src={r.image} alt="" style={{ maxWidth: 160, borderRadius: 8 }} />}
                 {mine ? <div className="alert">عرضك اتبعت: {fmt(mine.price)} ج.م للوحدة · {mine.status === "accepted" ? "العميل قبل عرضك 🎉" : "في انتظار رد العميل"}</div>

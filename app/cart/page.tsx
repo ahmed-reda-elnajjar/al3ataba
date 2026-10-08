@@ -21,7 +21,7 @@ export default function Cart() {
   };
   return (
     <div className="wc">
-      <h1 style={{ marginBottom: 16 }}>السلة ({items.length})</h1>
+      <h1 style={{ marginBottom: 4 }}>سلة التسوق</h1><small style={{ display: "block", marginBottom: 14 }}>{items.length} منتجات</small>
       <div className="row wrap" style={{ alignItems: "flex-start", gap: 24 }}>
         <div className="sp col" style={{ minWidth: 280 }}>
           {groups.map(([mid, list]) => (
@@ -29,16 +29,18 @@ export default function Cart() {
               <div className="row"><b className="sp">{list[0].merchant}</b><span className="bd g">طلب منفصل</span></div>
               {list.map((i) => (
                 <div key={i.id} className="row">
-                  <Img src={i.image} ic="ph-package" ratio={1} style={{ width: 64, borderRadius: 8, flex: "none" }} />
+                  <Img src={i.image} ic="ph-package" ratio={1} style={{ width: 72, borderRadius: 12, flex: "none", background: "#fff", border: "1px solid var(--bd)" }} />
                   <div className="sp col g4">
                     <b>{i.name}</b>
                     <small>{fmt(i.price)} ج.م / {i.unit}</small>
                     {i.fixed ? <small>الكمية: {i.qty} {i.unit} (حسب عرض السعر)</small> : (
-                      <div className="row g4"><button className="btn o sm2" onClick={() => change(i.id, i.qty - Math.max(1, Math.round(i.moq / 2)))}>−</button><b style={{ minWidth: 40, textAlign: "center" }}>{i.qty}</b><button className="btn o sm2" onClick={() => change(i.id, i.qty + Math.max(1, Math.round(i.moq / 2)))}>+</button></div>
+                      <div className="qty" style={{ alignSelf: "flex-start" }}><button style={{ height: 34, width: 34 }} aria-label="أكثر" onClick={() => change(i.id, i.qty + Math.max(1, Math.round(i.moq / 2)))}><i className="ph ph-plus" /></button><b style={{ minWidth: 44, textAlign: "center" }}>{i.qty}</b><button style={{ height: 34, width: 34 }} aria-label="أقل" onClick={() => change(i.id, i.qty - Math.max(1, Math.round(i.moq / 2)))}><i className="ph ph-minus" /></button></div>
                     )}
                   </div>
-                  <b>{fmt(i.qty * i.price)} ج.م</b>
-                  <button className="btn r sm2" onClick={() => remove(i.id)} aria-label="حذف"><i className="ph ph-trash" /></button>
+                  <div className="col g8" style={{ alignItems: "flex-end" }}>
+                    <button className="ico" onClick={() => remove(i.id)} aria-label="حذف" style={{ color: "var(--err)" }}><i className="ph ph-trash" /></button>
+                    <b className="price">{fmt(i.qty * i.price)} ج.م</b>
+                  </div>
                 </div>
               ))}
             </div>
@@ -49,7 +51,7 @@ export default function Cart() {
           <div className="row"><span className="sp">المنتجات</span>{fmt(subtotal)} ج.م</div>
           <div className="row"><span className="sp">الشحن ({groups.length} تاجر)</span>{fmt(shipping)} ج.م</div>
           <div className="row b"><span className="sp">الإجمالي</span><span style={{ fontSize: 20 }}>{fmt(subtotal + shipping)} ج.م</span></div>
-          <Link href="/checkout" className="btn blk">كمّل الطلب</Link>
+          <Link href="/checkout" className="btn blk">إتمام الطلب</Link>
           <small>الشحن تقديري وممكن يتعدّل حسب الكمية والمحافظة.</small>
         </div>
       </div>

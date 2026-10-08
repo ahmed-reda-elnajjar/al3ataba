@@ -7,8 +7,11 @@ export const ORDER_STATUS: Record<string, string> = { new: "جديد", confirmed
 export const STATUS_FLOW = ["new", "confirmed", "shipped", "delivered", "cancelled"];
 export const PAY_METHODS = [
   { id: "cod", label: "الدفع عند الاستلام", icon: "ph-hand-coins" },
-  { id: "transfer", label: "تحويل (إنستاباي / فودافون كاش / بنكي)", icon: "ph-bank" },
+  { id: "vcash", label: "فودافون كاش", icon: "ph-device-mobile" },
+  { id: "instapay", label: "إنستاباي / تحويل بنكي", icon: "ph-bank" },
+  { id: "transfer", label: "تحويل", icon: "ph-bank", hidden: true },
 ];
+export const isTransfer = (id: string) => id === "vcash" || id === "instapay" || id === "transfer";
 export const SHIP_METHODS = [
   { id: "ship", label: "شحن لعنوانك", icon: "ph-truck" },
   { id: "pickup", label: "استلام من المورد", icon: "ph-warehouse" },
@@ -26,5 +29,9 @@ export const DEFAULT_SETTINGS = {
   supportPhone: "",
   paymentInstructions: "حوّل المبلغ على رقم إنستاباي / فودافون كاش اللي هيوصلك من فريق العتبة، وابعت صورة التحويل على واتساب.",
   announcement: "",
+  heroTitle: "منتجات الجملة بأسعار حقيقية",
+  heroSub: "من كل أسواق مصر .. في مكان واحد",
+  heroImage: "",
+  city: "القاهرة",
 };
 export const HOUSE = { id: "al3ataba", name: "العتبة" };

@@ -1,4 +1,5 @@
 "use client";
+import { isTransfer } from "@/lib/config";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -14,7 +15,7 @@ function Body() {
       <h1>تم استلام طلبك</h1>
       {nos.length > 0 && <p>رقم الطلب: <b>{nos.join(" ، ")}</b></p>}
       <p className="mu">الطلب وصل للتاجر وهيتواصل معاك للتأكيد. تقدر تتابع حالته من حسابك.</p>
-      {sp.get("pay") === "transfer" && <div className="alert" style={{ textAlign: "start" }}>{settings.paymentInstructions}</div>}
+      {isTransfer(sp.get("pay") || "") && <div className="alert" style={{ textAlign: "start" }}>{settings.paymentInstructions}</div>}
       <Link href="/account" className="btn blk">تابع طلباتي</Link>
       <Link href="/" style={{ color: "var(--pm)" }}>ارجع للرئيسية</Link>
     </div>

@@ -5,12 +5,24 @@ import { dbI } from "@/lib/firebase";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
 import { DEFAULT_CATEGORIES, ICONS } from "@/lib/config";
+import { uploadImage } from "@/lib/img";
+import { useApp } from "@/lib/providers";
 
 export default function AdminCategories() {
   const { data, loading, reload } = useAsync(listCategories, []);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(ICONS[0]);
   const [err, setErr] = useState("");
+  const { user } = useApp();
+  const [up, setUp] = useState("");
+  const setImg = async (id: string, file?: File) => {
+    if (!file || !user) return;
+    setUp(id); setErr("");
+    try { await updateDoc(doc(dbI(), "categories", id), { image: await uploadImage(file, user.uid, "products") }); reload(); }
+    catch { setErr("تعذّر رفع الصورة."); }
+    setUp("");
+  };
+  const clearImg = async (id: string) => { await updateDoc(doc(dbI(), "categories", id), { image: "" }); reload(); };
   const add = async () => {
     if (name.trim().length < 2) return setErr("اكتب اسم القسم.");
     setErr("");
@@ -38,7 +50,7 @@ export default function AdminCategories() {
   return (
     <>
       <div className="card col">
-        <b>إضافة قسم</b>
+        <b>إضافة قسم</b><small>بعد الإضافة اضغط على مربع الكاميرا جنب القسم عشان تحط له صورة (بتظهر في الرئيسية وصفحة الأقسام).</small>
         <div className="row wrap">
           <input className="in" style={{ maxWidth: 260 }} placeholder="اسم القسم" value={name} onChange={(e) => setName(e.target.value)} />
           <select className="in" style={{ maxWidth: 200 }} value={icon} onChange={(e) => setIcon(e.target.value)}>{ICONS.map((i) => <option key={i} value={i}>{i.replace("ph-", "")}</option>)}</select>
@@ -53,10 +65,14 @@ export default function AdminCategories() {
         <div className="col">
           {data.map((c, i) => (
             <div key={c.id} className="card row">
-              <i className={`ph ${c.icon}`} style={{ color: "var(--pm)" }} />
+              <label title="صورة القسم" style={{ cursor: "pointer", position: "relative", flex: "none" }}>
+                {c.image ? <img src={c.image} alt="" className="ph-thumb" /> : <span className="ph-thumb" style={{ display: "grid", placeItems: "center", color: "var(--gold)" }}>{up === c.id ? "…" : <i className="ph ph-camera-plus" />}</span>}
+                <input type="file" accept="image/*" hidden onChange={(e) => { setImg(c.id, e.target.files?.[0]); e.target.value = ""; }} />
+              </label>
               <input className="in sp" defaultValue={c.name} onBlur={(e) => e.target.value !== c.name && rename(c.id, e.target.value)} />
               <button className="btn o sm2" disabled={i === 0} onClick={() => move(i, -1)} aria-label="لفوق"><i className="ph ph-arrow-up" /></button>
               <button className="btn o sm2" disabled={i === data.length - 1} onClick={() => move(i, 1)} aria-label="لتحت"><i className="ph ph-arrow-down" /></button>
+              {c.image && <button className="btn o sm2" onClick={() => clearImg(c.id)} title="شيل الصورة"><i className="ph ph-image-broken" /></button>}
               <button className="btn r sm2" onClick={() => del(c.id, c.name)}>حذف</button>
             </div>
           ))}

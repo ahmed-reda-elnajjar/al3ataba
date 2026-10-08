@@ -87,9 +87,10 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     <div className="card col" style={{ gap: 16 }}>
       <h3>{p ? "تعديل المنتج" : "إضافة منتج جديد"}</h3>
       <div className="fld"><label>صور المنتج (حتى 8)</label>
+        {images.length === 0 && <label className="drop" style={{ minHeight: 150 }}><i className="ph ph-camera" /><b style={{ color: "var(--pd)" }}>{up ? "جاري رفع الصور…" : "إضافة صور المنتج"}</b><small>حتى 8 صور</small><input type="file" accept="image/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         <div className="thumbs">
           {images.map((u, i) => <div key={u.slice(-30) + i} className="t"><img src={u} alt="" /><button type="button" aria-label="حذف" onClick={() => setImages(images.filter((_, j) => j !== i))}>×</button></div>)}
-          {images.length < 8 && <label className="btn o" style={{ width: 84, height: 84, flexDirection: "column", padding: 0, minHeight: 0 }}><i className="ph ph-camera-plus" /><small>{up ? "..." : "ارفع"}</small><input type="file" accept="image/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
+          {images.length > 0 && images.length < 8 && <label className="btn o" style={{ width: 84, height: 84, flexDirection: "column", padding: 0, minHeight: 0 }}><i className="ph ph-camera-plus" /><small>{up ? "..." : "ارفع"}</small><input type="file" accept="image/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         </div>
       </div>
       <div className="fld"><label>اسم المنتج</label><input className="in" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: كوبايات زجاج 250 مل" /></div>

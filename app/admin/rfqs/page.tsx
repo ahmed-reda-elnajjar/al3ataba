@@ -21,7 +21,7 @@ export default function AdminRfqs() {
           {data.map((r) => (
             <div key={r.id} className="card col">
               <div className="row wrap"><b className="sp">{r.product}</b><small>{dateStr(r.createdAt)}</small><Status s={r.status} /></div>
-              <small>{r.buyerName} · {r.quantity} {r.unit} · {r.governorate} · ميزانية: {r.budget || "—"} · مطلوب قبل: {r.neededBy || "—"}</small>
+              <small>{r.kind === "retail" ? "تجزئة" : "جملة"} · {r.buyerName} · {r.quantity} {r.unit} · {r.governorate} · ميزانية: {r.budget || "—"} · مطلوب قبل: {r.neededBy || "—"}</small>
               {r.specs && <small>{r.specs}</small>}
               <button className="btn o sm2" style={{ alignSelf: "flex-start" }} onClick={() => toggle(r)}>{r.status === "open" ? "إغلاق الطلب" : "إعادة فتحه"}</button>
             </div>

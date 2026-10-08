@@ -9,7 +9,7 @@ export type Product = {
   cod: boolean; madeInEgypt: boolean; logoPrint: boolean;
   status: PStatus; keywords: string[]; createdAt?: { seconds: number };
 };
-export type Category = { id: string; name: string; icon: string; order: number };
+export type Category = { id: string; name: string; icon: string; order: number; image?: string };
 export type Merchant = {
   id: string; name: string; type: string; governorate: string; city?: string; phone: string; about: string;
   regNo?: string; taxNo?: string; status: "pending" | "approved" | "rejected"; verified: boolean;
@@ -29,7 +29,7 @@ export type Order = {
 };
 export type Rfq = {
   id: string; userId: string; buyerName: string; product: string; categoryName: string; quantity: number; unit: string;
-  budget: string; governorate: string; neededBy: string; specs: string; image?: string; status: "open" | "closed";
+  budget: string; governorate: string; neededBy: string; specs: string; image?: string; status: "open" | "closed"; kind?: "wholesale" | "retail";
   createdAt?: { seconds: number };
 };
 export type Offer = {
@@ -39,4 +39,5 @@ export type Offer = {
 };
 export type Settings = {
   shippingPerMerchant: number; whatsapp: string; supportPhone: string; paymentInstructions: string; announcement: string;
+  heroTitle: string; heroSub: string; heroImage: string; city: string;
 };

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { collection, doc, getFirestore, serverTimestamp, writeBatch } from "firebase/firestore";
 import { app } from "@/lib/firebase";
 import { st } from "@/lib/style";
-import { GOVERNORATES, PAY_METHODS, SHIP_METHODS } from "@/lib/config";
+import { GOVERNORATES, PAY_METHODS, SHIP_METHODS, isTransfer } from "@/lib/config";
 import { fmt, orderNo } from "@/lib/format";
 import { useApp } from "@/lib/providers";
 import { RequireLogin } from "@/components/Guard";
@@ -63,7 +63,12 @@ function Form() {
 
   return (
     <div className="wc" style={{ maxWidth: 900 }}>
-      <h1 style={{ marginBottom: 16 }}>إتمام الطلب</h1>
+      <h1 style={{ marginBottom: 14 }}>الدفع وإتمام الطلب</h1>
+      <div className="st" style={{ maxWidth: 520, margin: "0 auto 18px" }}>
+        <div className={valid ? "dn" : "on"}><b>{valid ? <i className="ph ph-check" style={{ fontSize: 16 }} /> : 1}</b>العنوان</div>
+        <div className={valid ? "on" : ""}><b>2</b>الدفع</div>
+        <div><b>3</b>التأكيد</div>
+      </div>
       <div className="row wrap" style={{ alignItems: "flex-start", gap: 24 }}>
         <div className="sp col" style={{ minWidth: 300 }}>
           <div className="card col"><h3>بيانات التوصيل</h3>
@@ -78,14 +83,15 @@ function Form() {
             <div className="fld"><label>ملاحظات للتاجر (اختياري)</label><textarea className="in" value={f.note} onChange={set("note")} /></div>
           </div>
           <div className="card col"><h3>طريقة الاستلام</h3>
-            {SHIP_METHODS.map((m) => <div key={m.id} className={`opt${ship === m.id ? " on" : ""}`} onClick={() => setShip(m.id)}><i className={`ph ${m.icon}`} /><span className="sp">{m.label}</span><b>{m.id === "pickup" ? "مجاناً" : `${fmt(settings.shippingPerMerchant)} ج.م / تاجر`}</b></div>)}
+            {SHIP_METHODS.map((m) => <div key={m.id} className={`opt${ship === m.id ? " on" : ""}`} onClick={() => setShip(m.id)}><i className={`ph ${m.icon}`} /><span className="sp">{m.label}</span><b>{m.id === "pickup" ? "مجاناً" : `${fmt(settings.shippingPerMerchant)} ج.م / تاجر`}</b><span className="ck">{ship === m.id && <i className="ph ph-check" />}</span></div>)}
           </div>
           <div className="card col"><h3>طريقة الدفع</h3>
-            {PAY_METHODS.map((m) => {
+            {PAY_METHODS.filter((m) => !m.hidden).map((m) => {
               const off = m.id === "cod" && !codOk;
-              return <div key={m.id} className={`opt${pay === m.id ? " on" : ""}`} style={off ? { opacity: 0.5, pointerEvents: "none" } : undefined} onClick={() => setPay(m.id)}><i className={`ph ${m.icon}`} /><span className="sp">{m.label}{off && " (غير متاح لبعض المنتجات)"}</span></div>;
+              return <div key={m.id} className={`opt${pay === m.id ? " on" : ""}${off ? " dis" : ""}`} onClick={() => !off && setPay(m.id)}><i className={`ph ${m.icon}`} /><span className="sp">{m.label}{off && " (غير متاح لبعض المنتجات)"}</span><span className="ck">{pay === m.id && <i className="ph ph-check" />}</span></div>;
             })}
-            {pay === "transfer" && <div className="alert">{settings.paymentInstructions}</div>}
+            <div className="opt dis"><i className="ph ph-credit-card" /><span className="sp">بطاقة بنكية <small>(قريباً)</small></span><span className="ck" /></div>
+            {isTransfer(pay) && <div className="alert">{settings.paymentInstructions}</div>}
           </div>
         </div>
         <div className="card col" style={{ width: 320, maxWidth: "100%", flex: "none" }}>
@@ -94,7 +100,7 @@ function Form() {
           <div className="row"><span className="sp">الشحن</span>{fmt(perShip * groups.length)} ج.م</div>
           <div className="row b"><span className="sp">الإجمالي</span><span style={{ fontSize: 22 }}>{fmt(total)} ج.م</span></div>
           {error && <p className="err">{error}</p>}
-          <button className="btn blk" disabled={busy || !valid || (pay === "cod" && !codOk)} onClick={confirm}>{busy ? "جاري الحفظ…" : "أكّد الطلب"}</button>
+          <button className="btn blk" disabled={busy || !valid || (pay === "cod" && !codOk)} onClick={confirm}>{busy ? "جاري الحفظ…" : "إتمام الدفع وتأكيد الطلب"}</button>
           {!valid && <small>كمّل بيانات التوصيل (رقم موبايل صحيح) عشان تقدر تأكد.</small>}
         </div>
       </div>

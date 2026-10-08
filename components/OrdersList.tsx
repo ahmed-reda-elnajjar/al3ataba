@@ -12,6 +12,17 @@ function Tracking({ o, onStatus }: { o: Order; onStatus: NonNullable<Props["onSt
   return <input className="in" style={{ maxWidth: 200 }} placeholder="رقم الشحنة (اختياري)" value={t} onChange={(e) => setT(e.target.value)} onBlur={() => t !== (o.trackingNo || "") && onStatus(o, o.status, t)} />;
 }
 
+const TRACK = [["new", "تم الطلب", "ph-receipt"], ["confirmed", "تم التأكيد", "ph-check-circle"], ["shipped", "تم الشحن", "ph-truck"], ["delivered", "تم التسليم", "ph-package"]] as const;
+function Track({ s }: { s: string }) {
+  if (s === "cancelled") return <div className="alert e">الطلب ده اتلغى.</div>;
+  const at = TRACK.findIndex(([k]) => k === s);
+  return (
+    <div className="st" style={{ margin: "4px 0 6px" }}>
+      {TRACK.map(([k, t, ic], i) => <div key={k} className={i < at ? "dn" : i === at ? "on dn" : ""}><b><i className={`ph ${ic}`} style={{ fontSize: 16 }} /></b>{t}</div>)}
+    </div>
+  );
+}
+
 export function OrdersList({ orders, role, onStatus }: Props) {
   if (!orders.length) return <Empty icon="ph-receipt" title="مفيش طلبات لسه" />;
   return (
@@ -23,6 +34,7 @@ export function OrdersList({ orders, role, onStatus }: Props) {
           </div>
           {role !== "buyer" && <div className="row wrap g8"><span><i className="ph ph-user" /> {o.buyerName}</span><a href={`tel:${o.phone}`} style={{ color: "var(--pm)", direction: "ltr" }}>{o.phone}</a>{role === "admin" && <span className="bd g">{o.merchantName}</span>}</div>}
           {role === "buyer" && <small>التاجر: {o.merchantName}</small>}
+          {role === "buyer" && <Track s={o.status} />}
           {o.items.map((i) => (
             <div key={i.id} className="row">
               <Img src={i.image} ic="ph-package" ratio={1} style={{ width: 48, borderRadius: 8, flex: "none" }} />

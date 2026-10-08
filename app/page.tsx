@@ -5,79 +5,94 @@ import { useAsync } from "@/lib/hooks";
 import { useApp } from "@/lib/providers";
 import { listActiveProducts, listApprovedMerchants, listCategories } from "@/lib/store";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
-
-const HOW = [
-  { n: "1", t: "دوّر أو اطلب عرض سعر", d: "اختار المنتج أو اكتب طلبك وهيوصل لتجار مناسبين" },
-  { n: "2", t: "قارن واتفق", d: "قارن الأسعار بالكمية وقارن عروض أكتر من تاجر" },
-  { n: "3", t: "اطلب واستلم", d: "الطلب بيوصل للتاجر وبتتابع حالته من حسابك" },
-];
+import { Skyline } from "@/components/Brand";
 
 export default function Home() {
-  const { isAdmin } = useApp();
+  const { isAdmin, settings } = useApp();
   const { data, loading } = useAsync(async () => {
     const [products, cats, merchants] = await Promise.all([listActiveProducts(), listCategories(), listApprovedMerchants()]);
     return { products, cats, merchants };
   });
   const verified = new Set((data?.merchants ?? []).filter((m) => m.verified).map((m) => m.id));
   const products = data?.products ?? [];
+  const cats = data?.cats ?? [];
   return (
-    <>
-      <div className="hero">
-        <div className="col" style={{ maxWidth: 820, margin: "auto", textAlign: "center", gap: 14 }}>
-          <h1 style={{ color: "var(--pm)" }}>اشتري جملة من المصنع مباشرة</h1>
-          <p className="mu" style={{ fontSize: 17 }}>أسعار بالكمية من مصانع وتجار جملة في مصر، وتقدر تطلب عرض سعر من أكتر من تاجر في طلب واحد.</p>
-          <div className="row wrap g8" style={{ justifyContent: "center" }}>
-            <Link href="/search" className="btn">تصفّح المنتجات</Link>
-            <Link href="/rfq" className="btn o">اطلب عرض سعر</Link>
-          </div>
+    <div className="wc">
+      {/* hero banner */}
+      <section className="hero2" style={{ marginBottom: 20 }}>
+        {settings.heroImage ? <img className="bg" src={settings.heroImage} alt="" /> : <Skyline className="sky" />}
+        <div className="sh" />
+        <div className="tx">
+          <h1>{settings.heroTitle || "منتجات الجملة بأسعار حقيقية"}</h1>
+          <p>{settings.heroSub || "من كل أسواق مصر .. في مكان واحد"}</p>
+          <Link href="/search" className="btn gd sm2" style={{ minHeight: 42, padding: "0 22px" }}>تسوق الآن</Link>
         </div>
-      </div>
-      <div className="wc">
-        {(data?.cats.length ?? 0) > 0 && (
-          <div className="sec"><h2>الأقسام</h2>
-            <div className="grid" style={st("--m:4;--d:8")}>
-              {data!.cats.map((c) => (
-                <Link key={c.id} href={`/search?cat=${c.id}`} className="cat"><span className="circ"><i className={`ph ${c.icon}`} /></span>{c.name}</Link>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="sec">
-          <div className="row"><h2 className="sp">أحدث المنتجات</h2>{products.length > 0 && <Link href="/search" style={{ color: "var(--pm)" }}>شوف الكل ←</Link>}</div>
-          {loading ? <Loading /> : products.length ? (
-            <div className="grid" style={st("--m:2;--d:4")}>{products.slice(0, 8).map((p) => <ProductCard key={p.id} p={p} verified={verified.has(p.merchantId)} />)}</div>
-          ) : (
-            <Empty icon="ph-package" title="لسه مفيش منتجات منشورة" sub="المنتجات هتظهر هنا أول ما تتضاف وتتنشر.">
-              {isAdmin ? <Link href="/admin/products" className="btn">أضف أول منتج</Link> : <Link href="/rfq" className="btn">اطلب عرض سعر</Link>}
-            </Empty>
-          )}
+      </section>
+
+      {/* category circles */}
+      {cats.length > 0 && (
+        <div className="scr" style={{ gap: 14, marginBottom: 22 }}>
+          {cats.map((c) => (
+            <Link key={c.id} href={`/search?cat=${c.id}`} className="cat">
+              <span className="circ">{c.image ? <img src={c.image} alt="" /> : <i className={`ph ${c.icon}`} />}</span>{c.name}
+            </Link>
+          ))}
         </div>
-        {(data?.merchants.length ?? 0) > 0 && (
-          <div className="sec">
-            <div className="row"><h2 className="sp">تجار على العتبة</h2><Link href="/suppliers" style={{ color: "var(--pm)" }}>شوف الكل ←</Link></div>
-            <div className="scr">
-              {data!.merchants.slice(0, 10).map((m) => (
-                <Link key={m.id} href={`/store/${m.id}`} className="card row" style={{ minWidth: 270 }}>
-                  <Img ic="ph-storefront" ratio={1} style={{ width: 56, borderRadius: 8 }} />
-                  <div className="col g4"><b>{m.name}</b><small>{m.governorate} · {m.type}</small>{m.verified && <span className="bd v" style={{ alignSelf: "flex-start" }}><i className="ph ph-seal-check" />موثّق</span>}</div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="card row wrap" style={{ padding: 24, background: "var(--mint)", border: 0, marginBottom: 34 }}>
-          <i className="ph ph-clipboard-text" style={{ fontSize: 44, color: "var(--pm)" }} />
-          <div className="sp" style={{ minWidth: 220 }}><h2>مش لاقي اللي بتدور عليه؟</h2><p className="mu">اكتب طلبك والتجار يبعتولك أسعار.</p></div>
-          <Link href="/rfq" className="btn">اطلب عرض سعر</Link>
-        </div>
-        <div className="sec"><h2>إزاي بتشتري من العتبة؟</h2>
-          <div className="grid" style={st("--m:1;--d:3")}>
-            {HOW.map((h) => (
-              <div key={h.n} className="card row"><b style={{ font: "700 30px Alexandria", color: "var(--pa)" }}>{h.n}</b><div><b>{h.t}</b><p className="mu">{h.d}</p></div></div>
+      )}
+
+      {/* main categories grid */}
+      {cats.length > 0 && (
+        <section className="sec">
+          <div className="sec-h"><h2>أقسام رئيسية</h2><Link href="/categories">عرض الكل</Link></div>
+          <div className="grid" style={st("--m:3;--d:6")}>
+            {cats.slice(0, 6).map((c) => (
+              <Link key={c.id} href={`/search?cat=${c.id}`} className="tile">
+                <Img src={c.image} ic={c.icon} ratio={1} />
+                <span>{c.name}</span>
+              </Link>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* products */}
+      <section className="sec">
+        <div className="sec-h"><h2>وصل حديثاً</h2>{products.length > 0 && <Link href="/search">عرض الكل</Link>}</div>
+        {loading ? <Loading /> : products.length ? (
+          <div className="grid" style={st("--m:2;--d:5")}>{products.slice(0, 10).map((p) => <ProductCard key={p.id} p={p} verified={verified.has(p.merchantId)} />)}</div>
+        ) : (
+          <Empty icon="ph-package" title="لسه مفيش منتجات منشورة" sub="المنتجات هتظهر هنا أول ما تتضاف.">
+            {isAdmin ? <Link href="/admin/products/new" className="btn">أضف أول منتج</Link> : <Link href="/rfq" className="btn">اطلب منتج</Link>}
+          </Empty>
+        )}
+      </section>
+
+      {/* stores */}
+      {(data?.merchants.length ?? 0) > 0 && (
+        <section className="sec">
+          <div className="sec-h"><h2>متاجر الجملة</h2><Link href="/suppliers">عرض الكل</Link></div>
+          <div className="scr">
+            {data!.merchants.slice(0, 10).map((m) => (
+              <Link key={m.id} href={`/store/${m.id}`} className="card row" style={{ minWidth: 250 }}>
+                <span className="mi" style={{ width: 52, height: 52, borderRadius: 14, background: "var(--cream)", display: "grid", placeItems: "center", color: "var(--pm)", flex: "none" }}><i className="ph ph-storefront" style={{ fontSize: 28 }} /></span>
+                <div className="col g4" style={{ minWidth: 0 }}><b>{m.name}</b><small>{m.governorate} · {m.type}</small>{m.verified && <span className="bd v" style={{ alignSelf: "flex-start" }}><i className="ph ph-seal-check" />موثّق</span>}</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* RFQ banner */}
+      <section className="dash" style={{ marginBottom: 28 }}>
+        <Skyline className="sky" style={{ position: "absolute", bottom: 0, left: 0, width: "55%", opacity: 0.18, color: "var(--gold2)" }} />
+        <div className="row wrap" style={{ position: "relative" }}>
+          <div className="sp" style={{ minWidth: 220 }}>
+            <h2>مش لاقي اللي بتدور عليه؟</h2>
+            <small>اطلب المنتج بالكمية اللي محتاجها والتجار يبعتولك أسعارهم.</small>
+          </div>
+          <Link href="/rfq" className="btn gd">اطلب منتج</Link>
         </div>
-      </div>
-    </>
+      </section>
+    </div>
   );
 }

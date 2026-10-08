@@ -6,6 +6,15 @@ import { useAsync } from "@/lib/hooks";
 import { fmt } from "@/lib/format";
 import type { Order } from "@/lib/types";
 
+const MENU = [
+  { href: "/admin/merchants", t: "إدارة التجار", ic: "ph-users-three", k: "pendingMerchants" },
+  { href: "/admin/products", t: "إدارة المنتجات", ic: "ph-package", k: "pendingProducts" },
+  { href: "/admin/orders", t: "الطلبات", ic: "ph-receipt", k: "newOrders" },
+  { href: "/admin/categories", t: "الأقسام وترتيبها", ic: "ph-list-numbers", k: "" },
+  { href: "/admin/rfqs", t: "طلبات عروض الأسعار", ic: "ph-clipboard-text", k: "rfqs" },
+  { href: "/admin/settings", t: "الإعدادات والبانر", ic: "ph-gear", k: "" },
+] as const;
+
 export default function Admin() {
   const { data, loading } = useAsync(async () => {
     const db = dbI();
@@ -25,21 +34,20 @@ export default function Admin() {
     };
   }, []);
   if (loading || !data) return <div className="skel" />;
-  const S = ({ n, t, href }: { n: string | number; t: string; href: string }) => <Link href={href} className="stat"><b>{n}</b><small>{t}</small></Link>;
   return (
     <>
-      <div className="grid" style={{ ["--m" as string]: 2, ["--d" as string]: 4 }}>
-        <S n={data.newOrders} t="طلبات جديدة" href="/admin/orders" />
-        <S n={data.pendingMerchants} t="تجار منتظرين مراجعة" href="/admin/merchants" />
-        <S n={data.pendingProducts} t="منتجات منتظرة مراجعة" href="/admin/products" />
-        <S n={data.rfqs} t="طلبات عروض مفتوحة" href="/admin/rfqs" />
-        <S n={data.products} t="منتجات منشورة" href="/admin/products" />
-        <S n={data.merchants} t="تجار معتمدين" href="/admin/merchants" />
-        <S n={data.orders} t="كل الطلبات" href="/admin/orders" />
-        <S n={`${fmt(data.gmv)} ج.م`} t="قيمة الطلبات (غير الملغية)" href="/admin/orders" />
+      <div className="grid" style={{ ["--m" as string]: 3, ["--d" as string]: 4 }}>
+        <div className="stat"><small>إجمالي الطلبات</small><b>{fmt(data.orders)}</b></div>
+        <div className="stat"><small>التجار</small><b>{fmt(data.merchants)}</b></div>
+        <div className="stat"><small>المنتجات</small><b>{fmt(data.products)}</b></div>
+        <div className="stat hm"><small>قيمة الطلبات</small><b>{fmt(data.gmv)} ج.م</b></div>
       </div>
-      <div className="card col"><b>ابدأ من هنا</b>
-        <div className="row wrap"><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link><Link className="btn o" href="/admin/categories">إدارة الأقسام</Link><Link className="btn o" href="/admin/settings">إعدادات الموقع</Link></div>
+      <Link className="btn blk" href="/admin/products/new"><i className="ph ph-plus" />إضافة منتج جديد</Link>
+      <div className="menu">
+        {MENU.map((x) => {
+          const n = x.k ? (data as Record<string, number>)[x.k] : 0;
+          return <Link key={x.href} href={x.href}><span className="mi"><i className={`ph ${x.ic}`} /></span><span className="sp">{x.t}</span>{n > 0 && <span className="bd w">{n} جديد</span>}<i className="ph ph-caret-left chev" /></Link>;
+        })}
       </div>
     </>
   );
