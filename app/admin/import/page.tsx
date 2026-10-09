@@ -33,7 +33,7 @@ function guessMoq(text: string): string {
 }
 function guessName(text: string): string {
   const lines = text.split(/\n+/).map(clean).filter((l) => l && !/^\d+([.,]\d+)?\s*(ج|جنيه|egp)?$/i.test(digits(l)));
-  return (lines[0] || "").slice(0, 90);
+  return (lines[0] || "").replace(/^(اسم المنتج|المنتج|الاسم|الصنف|product)\s*[:：\-]\s*/i, "").slice(0, 90);
 }
 
 function toRows(msgs: TgMsg[]): Row[] {

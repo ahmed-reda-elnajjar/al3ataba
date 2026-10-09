@@ -7,6 +7,7 @@ import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
 import { isLowQuality, uploadImage } from "@/lib/img";
+import { COLORS, swatch } from "@/lib/colors";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
 
@@ -36,7 +37,9 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [tiers, setTiers] = useState<{ min: string; price: string }[]>(p?.tiers?.map((t) => ({ min: String(t.min), price: String(t.price) })) ?? [{ min: "1", price: "" }]);
   const [governorate, setGov] = useState(p?.governorate ?? merchant?.governorate ?? "القاهرة");
   const [images, setImages] = useState<string[]>(p?.images ?? []);
-  const [colors, setColors] = useState((p?.colors ?? []).join("، "));
+  const [colors, setColors] = useState<string[]>(p?.colors ?? []);
+  const [colorIn, setColorIn] = useState("");
+  const addColor = (c: string) => { const v = c.trim(); if (v && !colors.includes(v)) setColors([...colors, v]); setColorIn(""); };
   const [specs, setSpecs] = useState<{ k: string; v: string }[]>(p?.specs?.length ? p.specs : []);
   const [cod, setCod] = useState(p?.cod ?? true);
   const [made, setMade] = useState(p?.madeInEgypt ?? true);
@@ -74,7 +77,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     const data = {
       name: name.trim(), description: description.trim(), categoryId, categoryName: cat?.name ?? "",
       unit, moq: m, tiers: t.sort((a, b) => a.min - b.min), governorate,
-      images, colors: colors.split(/[,،]/).map((s) => s.trim()).filter(Boolean),
+      images, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
       specs: specs.filter((s) => s.k.trim() && s.v.trim()), cod, madeInEgypt: made, logoPrint: logo,
       status: isAdmin ? status : (p?.status ?? "active"),
       keywords: Array.from(new Set(`${name} ${cat?.name ?? ""}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
@@ -137,7 +140,21 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
       <div className="fld"><label>الوصف</label><textarea className="in" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
       <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 2 }}>
         <div className="fld"><label>المحافظة</label><select className="in" value={governorate} onChange={(e) => setGov(e.target.value)}>{GOVERNORATES.map((g) => <option key={g}>{g}</option>)}</select></div>
-        <div className="fld"><label>الألوان (افصل بينها بفاصلة)</label><input className="in" value={colors} onChange={(e) => setColors(e.target.value)} placeholder="أبيض، أسود" /></div>
+      </div>
+      <div className="fld"><label>الألوان المتاحة <small>— كل لون لوحده، والعميل بيختار منهم</small></label>
+        {colors.length > 0 && <div className="row g8 wrap">{colors.map((c, i) => (
+          <span key={c} className="chip on" style={{ paddingInlineEnd: 6 }}>
+            <span className="sw" style={{ background: swatch(c) || "var(--cream)" }} />{c}
+            {i > 0 && <button type="button" className="cx" aria-label="لقدّام" onClick={() => { const a = [...colors]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; setColors(a); }}><i className="ph ph-caret-right" /></button>}
+            <button type="button" className="cx" aria-label={`حذف ${c}`} onClick={() => setColors(colors.filter((x) => x !== c))}><i className="ph ph-x" /></button>
+          </span>))}</div>}
+        <div className="row">
+          <input className="in" value={colorIn} placeholder="اكتب لون واضغط إضافة (مثال: كحلي)" onChange={(e) => setColorIn(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === "," || e.key === "،") { e.preventDefault(); addColor(colorIn); } }} />
+          <button type="button" className="btn o" onClick={() => addColor(colorIn)}>إضافة</button>
+        </div>
+        <div className="row g4 wrap">{COLORS.filter(([n]) => !colors.includes(n)).map(([n, h]) => (
+          <button key={n} type="button" className="chip" style={{ minHeight: 32, fontSize: 13, padding: "0 10px" }} onClick={() => addColor(n)}><span className="sw" style={{ background: h }} />{n}</button>
+        ))}</div>
       </div>
       <div className="fld"><label>المواصفات</label>
         {specs.map((s, i) => (

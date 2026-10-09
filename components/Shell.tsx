@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/providers";
 import { waLink } from "@/lib/format";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
 import { Logo, LogoBig, MarketArt, Skyline } from "./Brand";
+import { SearchBox } from "./SearchBox";
 
 export function Announcement() {
   const { settings } = useApp();
@@ -85,12 +86,9 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
 }
 
 export function Header() {
-  const router = useRouter();
   const path = usePathname();
   const { count, loggedIn, isAdmin, merchant, settings } = useApp();
-  const [q, setQ] = useState("");
   const [menu, setMenu] = useState(false);
-  const go = (e: React.FormEvent) => { e.preventDefault(); router.push(q.trim() ? `/search?q=${encodeURIComponent(q.trim())}` : "/search"); };
   const panel = isAdmin ? { href: "/admin", t: "الإدارة", ic: "ph-gear" } : merchant?.status === "approved" ? { href: "/merchant", t: "متجري", ic: "ph-storefront" } : null;
   const bare = BARE.some((b) => path.startsWith(b));
   return (
@@ -99,10 +97,7 @@ export function Header() {
       <div className="in-row">
         <button className="burger" onClick={() => setMenu(true)} aria-label="القائمة"><i className="ph ph-list" /></button>
         <Logo light size={36} />
-        <form className="srch hm" onSubmit={go} style={{ maxWidth: 620 }}>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث عن منتج أو سوق أو متجر" aria-label="بحث" />
-          <button type="submit" aria-label="بحث"><i className="ph ph-magnifying-glass" /></button>
-        </form>
+        <SearchBox className="srch hm" style={{ maxWidth: 620 }} />
         <span className="sp" />
         <span className="loc sm"><i className="ph ph-map-pin" />{settings.city || "القاهرة"}</span>
         <nav className="nav hm">
@@ -112,10 +107,7 @@ export function Header() {
           <Link href={loggedIn ? "/account" : "/login"} className="nl"><i className="ph ph-user" />{loggedIn ? "حسابي" : "دخول"}</Link>
         </nav>
       </div>
-      <form className="srch sm" style={{ marginTop: 10 }} onSubmit={go}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث عن منتج أو سوق أو متجر" aria-label="بحث" />
-        <button type="submit" aria-label="بحث"><i className="ph ph-magnifying-glass" /></button>
-      </form>
+      <SearchBox className="srch sm" style={{ marginTop: 10 }} />
       <nav className="hdr-links hm">
         <Link href="/categories">الأقسام</Link><Link href="/search">كل المنتجات</Link><Link href="/suppliers">التجار والمصانع</Link><Link href="/rfq">طلب عرض سعر</Link><Link href="/help">المساعدة</Link>
       </nav>

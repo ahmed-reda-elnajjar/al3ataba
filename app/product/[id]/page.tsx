@@ -11,6 +11,7 @@ import { getMerchant, getProduct, listActiveProducts } from "@/lib/store";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { HOUSE } from "@/lib/config";
 import { useFavs } from "@/lib/favs";
+import { swatch } from "@/lib/colors";
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -64,7 +65,7 @@ export default function ProductPage() {
             <tr><th>الكمية ({p.unit})</th><th>السعر / {p.unit}</th></tr>
             {tiers.map((t, i) => { const next = tiers[i + 1]; const on = price === t.price && q >= t.min && (!next || q < next.min); return <tr key={t.min} className={on ? "hl" : ""}><td>{next ? `${t.min} – ${next.min - 1}` : `${t.min} +`}</td><td>{fmt(t.price)} ج.م</td></tr>; })}
           </tbody></table></div>
-          {p.colors?.length > 0 && <div className="col g8"><b>الخيار</b><div className="row g8 wrap">{p.colors.map((c) => <span key={c} className={`chip${c === color ? " on" : ""}`} onClick={() => setColor(c)}>{c}</span>)}</div></div>}
+          {p.colors?.length > 0 && <div className="col g8"><b>اختار اللون: <span style={{ color: "var(--gold)" }}>{color}</span></b><div className="row g8 wrap">{p.colors.map((c) => <button type="button" key={c} className={`chip${c === color ? " on" : ""}`} onClick={() => setColor(c)}><span className="sw" style={{ background: swatch(c) || "var(--cream)" }} />{c}</button>)}</div></div>}
           <small>أقل طلب: {p.moq} {p.unit}</small>
           <div className="row">
             <div className="qty">
