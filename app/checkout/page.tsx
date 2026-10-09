@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { collection, doc, getFirestore, serverTimestamp, writeBatch } from "firebase/firestore";
-import { app } from "@/lib/firebase";
+import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { dbI } from "@/lib/firebase";
 import { st } from "@/lib/style";
 import { GOVERNORATES, PAY_METHODS, SHIP_METHODS, isTransfer } from "@/lib/config";
 import { fmt, orderNo } from "@/lib/format";
@@ -34,7 +34,7 @@ function Form() {
   const confirm = async () => {
     if (!user) return;
     setBusy(true); setError("");
-    const db = getFirestore(app);
+    const db = dbI();
     const base = orderNo();
     const batch = writeBatch(db);
     const nos: string[] = [];

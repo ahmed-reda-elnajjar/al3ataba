@@ -64,6 +64,8 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     if (!categoryId) return setErr("اختار القسم.");
     if (!t.length) return setErr("حط سعر واحد على الأقل.");
     if (!images.length) return setErr("ارفع صورة واحدة على الأقل.");
+    const inline = images.filter((u) => u.startsWith("data:")).reduce((a, u) => a + u.length, 0);
+    if (inline > 850_000) return setErr("الصور حجمها كبير على قاعدة البيانات (Storage مش مفعّل). احذف صورة أو اتنين وجرّب تاني، أو فعّل Storage في Firebase.");
     const m = Math.max(1, Number(moq) || 1);
     const cat = cats.find((c) => c.id === categoryId);
     const owner = isAdmin && !p ? HOUSE : p ? { id: p.merchantId, name: p.merchantName } : { id: user, name: merchant?.name ?? "" };
@@ -79,12 +81,12 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     try {
       const write = p ? updateDoc(doc(dbI(), "products", p.id), { ...data, updatedAt: serverTimestamp() })
         : addDoc(collection(dbI(), "products"), { ...data, merchantId: owner.id, merchantName: owner.name, ownerUid: user, createdAt: serverTimestamp() });
-      await Promise.race([write, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), 25000))]);
+      await Promise.race([write, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), 60000))]);
       router.push(back);
     } catch (e) {
       const c = (e as { code?: string })?.code || "";
       setErr(c.includes("permission") ? "مرفوض: قواعد Firestore مش منشورة أو إنت مش داخل بإيميل الأدمن بجوجل."
-        : c === "timeout" ? "قاعدة البيانات مابتردش. اتأكد إن Firestore Database معمولة في Firebase وإن النت شغال."
+        : c === "timeout" ? "الحفظ أخد وقت طويل. افتح قائمة المنتجات واتأكد إنه ماتحفظش قبل ما تحاول تاني، وجرّب صور أقل أو نت أسرع."
         : `ماقدرناش نحفظ المنتج${c ? ` (${c})` : ""}.`);
       setBusy(false);
     }

@@ -32,5 +32,5 @@ export async function uploadImage(file: File, uid: string, folder: "products" | 
       return await withTimeout(getDownloadURL(r), 10000);
     } catch { storageDown = true; }
   }
-  return toDataUrl(await compress(file, 640, 0.7));
+  return toDataUrl(await compress(file, 560, 0.62));
 }
