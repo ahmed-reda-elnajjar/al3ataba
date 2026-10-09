@@ -284,3 +284,22 @@ a.card:hover{border-color:var(--gold)}
 
 /* the bottom nav overlaps the page on mobile: give the footer (not the page) the extra room, so no empty cream strip shows */
 @media(max-width:899px){.ft{padding-bottom:calc(64px + env(safe-area-inset-bottom))}}
+
+/* product gallery */
+.gsl{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:16px;border:1px solid var(--bd);background:#fff;aspect-ratio:1;overscroll-behavior-x:contain}
+.gsl::-webkit-scrollbar{display:none}
+.gsl-it{all:unset;flex:0 0 100%;scroll-snap-align:center;display:grid;place-items:center;cursor:zoom-in;color:#c5b28c}
+.gsl-it img{width:100%;height:100%;object-fit:contain;user-select:none}
+.gsl-it i{font-size:48px}
+.gnav{all:unset;cursor:pointer;position:absolute;top:calc(50% - 22px);width:40px;height:40px;border-radius:50%;background:#fffe;box-shadow:0 2px 10px #0003;display:grid;place-items:center;justify-content:center;align-items:center;color:var(--pd);z-index:2}
+.gnav[disabled]{opacity:.3;cursor:default}.gnav i{font-size:20px}
+.gnav.prev{right:10px}.gnav.next{left:10px}
+.gcount{position:absolute;top:12px;inset-inline-start:12px;background:#0009;color:#fff;font-size:12px;border-radius:99px;padding:2px 10px;z-index:2}
+.lb{position:fixed;inset:0;z-index:300;background:#000;display:flex;flex-direction:column;direction:rtl}
+.lb-top{display:flex;align-items:center;justify-content:space-between;color:#fff;padding:12px 14px;font-size:14px}
+.lb-top button{all:unset;cursor:pointer;width:44px;height:44px;display:grid;place-items:center;border-radius:50%;background:#ffffff1f;color:#fff}.lb-top i{font-size:24px}
+.lb-sl{flex:1;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+.lb-sl::-webkit-scrollbar{display:none}
+.lb-it{flex:0 0 100%;scroll-snap-align:center;display:grid;place-items:center;padding-bottom:env(safe-area-inset-bottom)}
+.lb-it img{max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom}
+.lb .gnav{top:50%}

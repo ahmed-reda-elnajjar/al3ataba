@@ -11,6 +11,7 @@ import { getMerchant, getProduct, listActiveProducts } from "@/lib/store";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { HOUSE } from "@/lib/config";
 import { useFavs } from "@/lib/favs";
+import { Gallery } from "@/components/Gallery";
 import { swatch } from "@/lib/colors";
 
 export default function ProductPage() {
@@ -27,8 +28,7 @@ export default function ProductPage() {
   const favs = useFavs();
   const [qty, setQty] = useState(0);
   const [color, setColor] = useState("");
-  const [img, setImg] = useState(0);
-  useEffect(() => { if (p) { setQty(p.moq); setColor(p.colors?.[0] || ""); setImg(0); } }, [p]);
+  useEffect(() => { if (p) { setQty(p.moq); setColor(p.colors?.[0] || ""); } }, [p]);
   useEffect(() => { if (p) document.title = `${p.name} | العتبة`; }, [p]);
 
   if (loading) return <div className="wc"><Loading rows={2} /></div>;
@@ -49,12 +49,9 @@ export default function ProductPage() {
       {isAdmin && <div className="alert row wrap" style={{ marginBottom: 12 }}><b className="sp">أدمن</b><Link className="btn o sm2" href={`/admin/products/${p.id}`}>تعديل المنتج</Link><Link className="btn sm2" href="/admin/products/new">+ منتج جديد</Link></div>}
       <small><Link href="/">الرئيسية</Link> › <Link href={`/search?cat=${p.categoryId}`}>{p.categoryName}</Link></small>
       <div className="grid mt" style={st("--m:1;--d:2;align-items:start;gap:28px")}>
-        <div style={{ position: "relative" }}>
-          <button className={`ico${favs.has(p.id) ? " on" : ""}`} style={{ position: "absolute", top: 12, insetInlineEnd: 12, zIndex: 2, width: 42, height: 42 }} onClick={() => favs.toggle(p.id)} aria-label="المفضلة"><i className={`ph${favs.has(p.id) ? "-fill" : ""} ph-heart`} /></button>
-          <Img src={p.images?.[img]} ic="ph-package" ratio={1} style={{ background: "#fff", border: "1px solid var(--bd)" }} />
-          {p.images?.length > 1 && <div className="dots" style={{ marginTop: 10 }}>{p.images.map((_, i) => <i key={i} className={i === img ? "on" : ""} style={{ background: i === img ? "var(--gold)" : "var(--bd)" }} />)}</div>}
-          {p.images?.length > 1 && <div className="gal">{p.images.map((s, i) => <button key={i} className={i === img ? "on" : ""} onClick={() => setImg(i)}><Img src={s} ratio={1} /></button>)}</div>}
-        </div>
+        <Gallery images={p.images ?? []}>
+          <button className={`ico${favs.has(p.id) ? " on" : ""}`} style={{ position: "absolute", top: 12, insetInlineEnd: 12, zIndex: 3, width: 42, height: 42 }} onClick={() => favs.toggle(p.id)} aria-label="المفضلة"><i className={`ph${favs.has(p.id) ? "-fill" : ""} ph-heart`} /></button>
+        </Gallery>
         <div className="col">
           <div className="row g8 wrap">
             {p.madeInEgypt && <span className="bd">صنع في مصر</span>}{p.cod && <span className="bd">يقبل الدفع عند الاستلام</span>}{p.logoPrint && <span className="bd">طباعة لوجو</span>}
