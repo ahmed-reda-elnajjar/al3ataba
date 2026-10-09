@@ -5,7 +5,7 @@ export type Product = {
   id: string; name: string; description: string; categoryId: string; categoryName: string;
   unit: string; moq: number; tiers: Tier[]; governorate: string;
   merchantId: string; merchantName: string; ownerUid: string;
-  images: string[]; videos?: string[]; specs: Spec[]; colors: string[];
+  images: string[]; videos?: string[]; media?: string[]; specs: Spec[]; colors: string[];
   cod: boolean; madeInEgypt: boolean; logoPrint: boolean;
   status: PStatus; keywords: string[]; createdAt?: { seconds: number };
 };

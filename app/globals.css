@@ -315,3 +315,4 @@ a.card:hover{border-color:var(--gold)}
 .lb-it video{max-height:100%}
 .gplay{position:absolute;inset:0;margin:auto;width:30px;height:30px;font-size:30px!important;color:#fff;filter:drop-shadow(0 1px 3px #0008)}
 .thumbs .t.vid{cursor:default;background:#000}.thumbs .t video{width:100%;height:100%;object-fit:cover}
+.vbadge{position:absolute;bottom:8px;inset-inline-start:8px;width:34px;height:34px;border-radius:50%;background:#000a;color:#fff;display:grid;place-items:center}.vbadge i{font-size:16px}

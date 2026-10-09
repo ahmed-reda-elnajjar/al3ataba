@@ -66,3 +66,5 @@ export async function uploadVideo(file: File): Promise<string> {
 }
 /** First-frame poster for a Cloudinary video URL. */
 export const videoPoster = (url: string) => url.replace("/upload/q_auto/", "/upload/so_0/").replace(/\.[a-z0-9]+$/i, ".jpg");
+
+export const isVideoUrl = (u: string) => /\/video\/upload\//.test(u);

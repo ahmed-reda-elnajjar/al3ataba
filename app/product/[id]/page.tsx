@@ -49,7 +49,7 @@ export default function ProductPage() {
       {isAdmin && <div className="alert row wrap" style={{ marginBottom: 12 }}><b className="sp">أدمن</b><Link className="btn o sm2" href={`/admin/products/${p.id}`}>تعديل المنتج</Link><Link className="btn sm2" href="/admin/products/new">+ منتج جديد</Link></div>}
       <small><Link href="/">الرئيسية</Link> › <Link href={`/search?cat=${p.categoryId}`}>{p.categoryName}</Link></small>
       <div className="grid mt" style={st("--m:1;--d:2;align-items:start;gap:28px")}>
-        <Gallery images={p.images ?? []} videos={p.videos ?? []}>
+        <Gallery images={p.images ?? []} videos={p.videos ?? []} order={p.media}>
           <button className={`ico${favs.has(p.id) ? " on" : ""}`} style={{ position: "absolute", top: 12, insetInlineEnd: 12, zIndex: 3, width: 42, height: 42 }} onClick={() => favs.toggle(p.id)} aria-label="المفضلة"><i className={`ph${favs.has(p.id) ? "-fill" : ""} ph-heart`} /></button>
         </Gallery>
         <div className="col">

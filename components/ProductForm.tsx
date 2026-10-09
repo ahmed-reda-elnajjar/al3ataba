@@ -6,7 +6,7 @@ import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
-import { isLowQuality, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
+import { isLowQuality, isVideoUrl, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
 import { COLORS, swatch } from "@/lib/colors";
 import { useDragSort } from "@/lib/dnd";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
@@ -37,8 +37,10 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [moq, setMoq] = useState(String(p?.moq ?? 1));
   const [tiers, setTiers] = useState<{ min: string; price: string }[]>(p?.tiers?.map((t) => ({ min: String(t.min), price: String(t.price) })) ?? [{ min: "1", price: "" }]);
   const [governorate, setGov] = useState(p?.governorate ?? merchant?.governorate ?? "القاهرة");
-  const [images, setImages] = useState<string[]>(p?.images ?? []);
-  const [videos, setVideos] = useState<string[]>(p?.videos ?? []);
+  // one ordered list of photos + videos; the first item is the cover shown on the product card
+  const [media, setMedia] = useState<string[]>(p?.media?.length ? p.media : [...(p?.images ?? []), ...(p?.videos ?? [])]);
+  const images = media.filter((u) => !isVideoUrl(u));
+  const videos = media.filter(isVideoUrl);
   const [upMsg, setUpMsg] = useState("");
   const [colors, setColors] = useState<string[]>(p?.colors ?? []);
   const [colorIn, setColorIn] = useState("");
@@ -50,8 +52,8 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [status, setStatus] = useState<Product["status"]>(p?.status ?? "active");
   const [busy, setBusy] = useState(false);
   const [up, setUp] = useState(false);
-  const imgDnd = useDragSort<string>(images, (u) => u, (next) => setImages(next));
-  const move = (from: number, to: number) => setImages((xs) => { if (to < 0 || to >= xs.length || from === to) return xs; const a = [...xs]; const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; });
+  const imgDnd = useDragSort<string>(media, (u) => u, (next) => setMedia(next));
+  const move = (from: number, to: number) => setMedia((xs) => { if (to < 0 || to >= xs.length || from === to) return xs; const a = [...xs]; const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; });
   const [err, setErr] = useState("");
 
   const pick = async (files: FileList | null) => {
@@ -64,11 +66,11 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     let n = 0;
     for (const f of imgs) {
       setUpMsg(`جاري رفع الصور… ${++n}/${imgs.length + vids.length}`);
-      try { const u = await uploadImage(f, user, "products"); setImages((x) => [...x, u].slice(0, 8)); } catch { errs.push(`تعذّر رفع ${f.name}`); }
+      try { const u = await uploadImage(f, user, "products"); setMedia((x) => [...x, u]); } catch { errs.push(`تعذّر رفع ${f.name}`); }
     }
     for (const f of vids) {
       setUpMsg(`جاري رفع الفيديو… ${++n}/${imgs.length + vids.length} (ممكن ياخد دقيقة)`);
-      try { const u = await uploadVideo(f); setVideos((x) => [...x, u].slice(0, 3)); }
+      try { const u = await uploadVideo(f); setMedia((x) => [...x, u]); }
       catch (e) { const m = (e as Error).message; errs.push(m === "too-big" ? `${f.name}: الفيديو أكبر من 100 ميجا` : `تعذّر رفع الفيديو ${f.name}`); }
     }
     if (all.some((f) => f.type.startsWith("video/")) && videos.length + vids.length >= 3 && all.filter((f) => f.type.startsWith("video/")).length > vids.length) errs.push("الحد 3 فيديوهات للمنتج.");
@@ -82,7 +84,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     if (name.trim().length < 3) return setErr("اكتب اسم المنتج.");
     if (!categoryId) return setErr("اختار القسم.");
     if (!t.length) return setErr("حط سعر واحد على الأقل.");
-    if (!images.length) return setErr("ارفع صورة واحدة على الأقل (الفيديو لوحده مش كفاية، الصورة هي اللي بتظهر في الكارت).");
+    if (!media.length) return setErr("ارفع صورة أو فيديو واحد على الأقل.");
     const inline = images.filter((u) => u.startsWith("data:")).reduce((a, u) => a + u.length, 0);
     if (inline > 850_000) return setErr("الصور حجمها كبير على قاعدة البيانات (Storage مش مفعّل). احذف صورة أو اتنين وجرّب تاني، أو فعّل Storage في Firebase.");
     const m = Math.max(1, Number(moq) || 1);
@@ -91,7 +93,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     const data = {
       name: name.trim(), description: description.trim(), categoryId, categoryName: cat?.name ?? "",
       unit, moq: m, tiers: t.sort((a, b) => a.min - b.min), governorate,
-      images, videos, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
+      media, images: images.length ? images : [videoPoster(videos[0])], videos, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
       specs: specs.filter((s) => s.k.trim() && s.v.trim()), cod, madeInEgypt: made, logoPrint: logo,
       status: isAdmin ? status : (p?.status ?? "active"),
       keywords: Array.from(new Set(`${name} ${cat?.name ?? ""}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
@@ -115,26 +117,19 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     <div className="card col" style={{ gap: 16 }}>
       <h3>{p ? "تعديل المنتج" : "إضافة منتج جديد"}</h3>
       {images.some(isLowQuality) && <div className="alert w">الصور اتحفظت بجودة منخفضة لأن مفيش مكان تخزين صور مفعّل (Firebase Storage أو Cloudinary). فعّل واحد منهم والصور هتترفع بجودتها الأصلية.</div>}
-      <div className="fld"><label>صور وفيديوهات المنتج <small>— الأولى هي اللي بتظهر في الكارت. اسحب الصورة أو استخدم الأسهم لترتيبها، والنجمة تخليها الرئيسية.</small></label>
+      <div className="fld"><label>صور وفيديوهات المنتج <small>— الأول (صورة أو فيديو) هو الرئيسي وبيظهر في الكارت. اسحب الصورة أو استخدم الأسهم لترتيبها، والنجمة تخليها الرئيسية.</small></label>
         {images.length === 0 && videos.length === 0 && <label className="drop" style={{ minHeight: 150 }}><i className="ph ph-camera" /><b style={{ color: "var(--pd)" }}>{up ? upMsg || "جاري الرفع…" : "إضافة صور وفيديوهات المنتج"}</b><small>حتى 8 صور و3 فيديوهات (الفيديو لحد 100 ميجا)</small><input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         <div className="thumbs">
           {imgDnd.list.map((u, i) => (
-            <div key={u.slice(-40)} className="t sortable" {...imgDnd.item(u)}>
-              <img src={u} alt="" draggable={false} {...imgDnd.handle(u)} />
-              {i === 0 && <span className="main">الرئيسية</span>}
-              <button type="button" aria-label="حذف" onClick={() => setImages(images.filter((x) => x !== u))}>×</button>
+            <div key={u.slice(-40)} className={`t sortable${isVideoUrl(u) ? " vid" : ""}`} {...imgDnd.item(u)}>
+              {isVideoUrl(u) ? <video src={u} poster={videoPoster(u)} muted playsInline preload="metadata" {...imgDnd.handle(u)} /> : <img src={u} alt="" draggable={false} {...imgDnd.handle(u)} />}
+              {i === 0 ? <span className="main">الرئيسية</span> : isVideoUrl(u) ? <span className="main" style={{ background: "var(--pd)" }}><i className="ph ph-play" style={{ fontSize: 11 }} /> فيديو</span> : null}
+              <button type="button" aria-label="حذف" onClick={() => setMedia(media.filter((x) => x !== u))}>×</button>
               <div className="mv">
                 <button type="button" aria-label="لقدّام" disabled={i === 0} onClick={() => move(i, i - 1)}><i className="ph ph-caret-right" /></button>
                 {i > 0 && <button type="button" aria-label="اجعلها الرئيسية" onClick={() => move(i, 0)}><i className="ph ph-star" /></button>}
-                <button type="button" aria-label="لورا" disabled={i === images.length - 1} onClick={() => move(i, i + 1)}><i className="ph ph-caret-left" /></button>
+                <button type="button" aria-label="لورا" disabled={i === media.length - 1} onClick={() => move(i, i + 1)}><i className="ph ph-caret-left" /></button>
               </div>
-            </div>
-          ))}
-          {videos.map((v) => (
-            <div key={v} className="t vid">
-              <video src={v} poster={videoPoster(v)} muted playsInline preload="metadata" />
-              <span className="main" style={{ background: "var(--pd)" }}><i className="ph ph-play" style={{ fontSize: 11 }} /> فيديو</span>
-              <button type="button" aria-label="حذف الفيديو" onClick={() => setVideos(videos.filter((x) => x !== v))}>×</button>
             </div>
           ))}
           {(images.length > 0 || videos.length > 0) && (images.length < 8 || videos.length < 3) && <label className="btn o" style={{ width: 104, height: 104, flexDirection: "column", padding: 0, minHeight: 0, whiteSpace: "normal" }}><i className="ph ph-camera-plus" /><small>{up ? "..." : "صورة / فيديو"}</small><input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}

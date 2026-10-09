@@ -23,8 +23,8 @@ const isVid = (u: string) => u.startsWith("vid:");
 const src = (u: string) => (isVid(u) ? u.slice(4) : u);
 const poster = (u: string) => src(u).replace("/upload/q_auto/", "/upload/so_0/").replace(/\.[a-z0-9]+$/i, ".jpg");
 
-export function Gallery({ images, videos = [], children }: { images: string[]; videos?: string[]; children?: React.ReactNode }) {
-  const media = [...images, ...videos.map((v) => "vid:" + v)];
+export function Gallery({ images, videos = [], order, children }: { images: string[]; videos?: string[]; order?: string[]; children?: React.ReactNode }) {
+  const media = order?.length ? order.map((u) => (/\/video\/upload\//.test(u) ? "vid:" + u : u)) : [...images, ...videos.map((v) => "vid:" + v)];
   const list = media.length ? media : [""];
   const main = useSlider(list.length);
   const [open, setOpen] = useState(false);

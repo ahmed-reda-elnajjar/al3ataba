@@ -4,6 +4,7 @@ import type { Product } from "@/lib/types";
 import { priceFor, rangeText } from "@/lib/pricing";
 import { useApp } from "@/lib/providers";
 import { useFavs } from "@/lib/favs";
+import { isVideoUrl, videoPoster } from "@/lib/img";
 
 export function Img({ src, ic = "ph-image", ratio = 1, className = "", style }: { src?: string; ic?: string; ratio?: number; className?: string; style?: React.CSSProperties }) {
   return (
@@ -19,10 +20,14 @@ export function ProductCard({ p, verified }: { p: Product; verified?: boolean })
   const inCart = items.some((i) => i.productId === p.id);
   const quick = () => add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: p.moq, price: priceFor(p.tiers, p.moq), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod });
   const fav = favs.has(p.id);
+  const coverVideo = p.media?.[0] && isVideoUrl(p.media[0]) ? p.media[0] : "";
   return (
     <div className="pc">
       <button className={`ico fav${fav ? " on" : ""}`} aria-label="المفضلة" onClick={() => favs.toggle(p.id)}><i className={`ph${fav ? "-fill" : ""} ph-heart`} /></button>
-      <Link href={`/product/${p.id}`}><Img src={p.images?.[0]} ic="ph-package" ratio={1} /></Link>
+      <Link href={`/product/${p.id}`} style={{ position: "relative", display: "block" }}>
+        <Img src={coverVideo ? videoPoster(coverVideo) : p.images?.[0]} ic="ph-package" ratio={1} />
+        {coverVideo && <span className="vbadge"><i className="ph ph-play" /></span>}
+      </Link>
       <div className="bodyc">
         <Link href={`/product/${p.id}`} className="nm">{p.name}</Link>
         <div className="row g4 wrap">
