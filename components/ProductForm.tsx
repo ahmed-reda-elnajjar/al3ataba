@@ -6,7 +6,7 @@ import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
-import { uploadImage } from "@/lib/img";
+import { isLowQuality, uploadImage } from "@/lib/img";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
 
@@ -44,6 +44,8 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [status, setStatus] = useState<Product["status"]>(p?.status ?? "active");
   const [busy, setBusy] = useState(false);
   const [up, setUp] = useState(false);
+  const [drag, setDrag] = useState(-1);
+  const move = (from: number, to: number) => setImages((xs) => { if (to < 0 || to >= xs.length || from === to) return xs; const a = [...xs]; const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; });
   const [err, setErr] = useState("");
 
   const pick = async (files: FileList | null) => {
@@ -95,10 +97,24 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   return (
     <div className="card col" style={{ gap: 16 }}>
       <h3>{p ? "تعديل المنتج" : "إضافة منتج جديد"}</h3>
-      <div className="fld"><label>صور المنتج (حتى 8)</label>
+      {images.some(isLowQuality) && <div className="alert w">الصور اتحفظت بجودة منخفضة لأن مفيش مكان تخزين صور مفعّل (Firebase Storage أو Cloudinary). فعّل واحد منهم والصور هتترفع بجودتها الأصلية.</div>}
+      <div className="fld"><label>صور المنتج (حتى 8) <small>— الأولى هي اللي بتظهر في الكارت. اسحب الصورة أو استخدم الأسهم لترتيبها، والنجمة تخليها الرئيسية.</small></label>
         {images.length === 0 && <label className="drop" style={{ minHeight: 150 }}><i className="ph ph-camera" /><b style={{ color: "var(--pd)" }}>{up ? "جاري رفع الصور…" : "إضافة صور المنتج"}</b><small>حتى 8 صور</small><input type="file" accept="image/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         <div className="thumbs">
-          {images.map((u, i) => <div key={u.slice(-30) + i} className="t"><img src={u} alt="" /><button type="button" aria-label="حذف" onClick={() => setImages(images.filter((_, j) => j !== i))}>×</button></div>)}
+          {images.map((u, i) => (
+            <div key={u.slice(-30) + i} className={`t${drag === i ? " drag" : ""}`} draggable
+              onDragStart={() => setDrag(i)} onDragEnd={() => setDrag(-1)}
+              onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (drag >= 0) move(drag, i); setDrag(-1); }}>
+              <img src={u} alt="" draggable={false} />
+              {i === 0 && <span className="main">الرئيسية</span>}
+              <button type="button" aria-label="حذف" onClick={() => setImages(images.filter((_, j) => j !== i))}>×</button>
+              <div className="mv">
+                <button type="button" aria-label="لقدّام" disabled={i === 0} onClick={() => move(i, i - 1)}><i className="ph ph-caret-right" /></button>
+                {i > 0 && <button type="button" aria-label="اجعلها الرئيسية" onClick={() => move(i, 0)}><i className="ph ph-star" /></button>}
+                <button type="button" aria-label="لورا" disabled={i === images.length - 1} onClick={() => move(i, i + 1)}><i className="ph ph-caret-left" /></button>
+              </div>
+            </div>
+          ))}
           {images.length > 0 && images.length < 8 && <label className="btn o" style={{ width: 84, height: 84, flexDirection: "column", padding: 0, minHeight: 0 }}><i className="ph ph-camera-plus" /><small>{up ? "..." : "ارفع"}</small><input type="file" accept="image/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         </div>
       </div>
