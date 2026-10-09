@@ -77,10 +77,17 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     };
     setBusy(true);
     try {
-      if (p) await updateDoc(doc(dbI(), "products", p.id), { ...data, updatedAt: serverTimestamp() });
-      else await addDoc(collection(dbI(), "products"), { ...data, merchantId: owner.id, merchantName: owner.name, ownerUid: user, createdAt: serverTimestamp() });
+      const write = p ? updateDoc(doc(dbI(), "products", p.id), { ...data, updatedAt: serverTimestamp() })
+        : addDoc(collection(dbI(), "products"), { ...data, merchantId: owner.id, merchantName: owner.name, ownerUid: user, createdAt: serverTimestamp() });
+      await Promise.race([write, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), 25000))]);
       router.push(back);
-    } catch { setErr("ماقدرناش نحفظ المنتج. اتأكد من الصلاحيات وحاول تاني."); setBusy(false); }
+    } catch (e) {
+      const c = (e as { code?: string })?.code || "";
+      setErr(c.includes("permission") ? "مرفوض: قواعد Firestore مش منشورة أو إنت مش داخل بإيميل الأدمن بجوجل."
+        : c === "timeout" ? "قاعدة البيانات مابتردش. اتأكد إن Firestore Database معمولة في Firebase وإن النت شغال."
+        : `ماقدرناش نحفظ المنتج${c ? ` (${c})` : ""}.`);
+      setBusy(false);
+    }
   };
 
   return (
@@ -131,7 +138,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
       </div>
       {isAdmin && <div className="fld" style={{ maxWidth: 240 }}><label>الحالة</label><select className="in" value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}><option value="active">منشور</option><option value="pending">قيد المراجعة</option><option value="hidden">مخفي</option></select></div>}
       {err && <div className="alert e">{err}</div>}
-      <div className="row"><button className="btn" disabled={busy || up} onClick={save}>{busy ? "جاري الحفظ…" : "حفظ المنتج"}</button><button className="btn o" type="button" onClick={() => router.push(back)}>إلغاء</button></div>
+      <div className="row"><button className="btn" disabled={busy || up} onClick={save}>{up ? "استنى، الصور بتترفع…" : busy ? "جاري الحفظ…" : "حفظ المنتج"}</button><button className="btn o" type="button" onClick={() => router.push(back)}>إلغاء</button></div>
     </div>
   );
 }

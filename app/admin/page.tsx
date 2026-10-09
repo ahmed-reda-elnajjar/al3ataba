@@ -11,6 +11,7 @@ const MENU = [
   { href: "/admin/products", t: "إدارة المنتجات", ic: "ph-package", k: "pendingProducts" },
   { href: "/admin/orders", t: "الطلبات", ic: "ph-receipt", k: "newOrders" },
   { href: "/admin/categories", t: "الأقسام وترتيبها", ic: "ph-list-numbers", k: "" },
+  { href: "/admin/import", t: "استيراد منتجات من تليجرام", ic: "ph-telegram-logo", k: "" },
   { href: "/admin/rfqs", t: "طلبات عروض الأسعار", ic: "ph-clipboard-text", k: "rfqs" },
   { href: "/admin/settings", t: "الإعدادات والبانر", ic: "ph-gear", k: "" },
 ] as const;

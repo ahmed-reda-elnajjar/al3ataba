@@ -62,6 +62,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
                 <L href="/admin" ic="ph-chart-bar" t="لوحة الإدارة" />
                 <L href="/admin/products/new" ic="ph-plus-circle" t="إضافة منتج" />
                 <L href="/admin/products" ic="ph-package" t="إدارة المنتجات" />
+                <L href="/admin/import" ic="ph-telegram-logo" t="استيراد من تليجرام" />
                 <L href="/admin/categories" ic="ph-list-numbers" t="الأقسام وترتيبها" />
                 <L href="/admin/orders" ic="ph-receipt" t="الطلبات" />
                 <L href="/admin/merchants" ic="ph-users-three" t="التجار" />
