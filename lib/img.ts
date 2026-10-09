@@ -18,8 +18,8 @@ const withTimeout = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Prom
 let storageDown = false; // after one failure, skip Storage for the rest of the session
 
 // Optional free image hosting (Cloudinary, unsigned upload preset). Set both in Vercel → Environment Variables.
-const CLD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD || "";
-const PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET || "";
+const CLD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD || "dvefx5ts8";
+const PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET || "hh3sejta";
 
 /** Full-quality pipeline: Cloudinary (if configured) → Firebase Storage → small inline fallback. */
 export async function uploadImage(file: File, uid: string, folder: "products" | "merchants" | "rfqs" = "products"): Promise<string> {
