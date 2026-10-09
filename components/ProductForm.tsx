@@ -6,8 +6,9 @@ import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
-import { isLowQuality, uploadImage } from "@/lib/img";
+import { isLowQuality, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
 import { COLORS, swatch } from "@/lib/colors";
+import { useDragSort } from "@/lib/dnd";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
 
@@ -37,6 +38,8 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [tiers, setTiers] = useState<{ min: string; price: string }[]>(p?.tiers?.map((t) => ({ min: String(t.min), price: String(t.price) })) ?? [{ min: "1", price: "" }]);
   const [governorate, setGov] = useState(p?.governorate ?? merchant?.governorate ?? "القاهرة");
   const [images, setImages] = useState<string[]>(p?.images ?? []);
+  const [videos, setVideos] = useState<string[]>(p?.videos ?? []);
+  const [upMsg, setUpMsg] = useState("");
   const [colors, setColors] = useState<string[]>(p?.colors ?? []);
   const [colorIn, setColorIn] = useState("");
   const addColor = (c: string) => { const v = c.trim(); if (v && !colors.includes(v)) setColors([...colors, v]); setColorIn(""); };
@@ -47,19 +50,30 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [status, setStatus] = useState<Product["status"]>(p?.status ?? "active");
   const [busy, setBusy] = useState(false);
   const [up, setUp] = useState(false);
-  const [drag, setDrag] = useState(-1);
+  const imgDnd = useDragSort<string>(images, (u) => u, (next) => setImages(next));
   const move = (from: number, to: number) => setImages((xs) => { if (to < 0 || to >= xs.length || from === to) return xs; const a = [...xs]; const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; });
   const [err, setErr] = useState("");
 
   const pick = async (files: FileList | null) => {
     if (!files?.length) return;
     setUp(true); setErr("");
-    try {
-      const urls: string[] = [];
-      for (const f of Array.from(files).slice(0, 8 - images.length)) urls.push(await uploadImage(f, user, "products"));
-      setImages((x) => [...x, ...urls].slice(0, 8));
-    } catch { setErr("تعذّر رفع الصورة، جرّب صورة تانية."); }
-    setUp(false);
+    const all = Array.from(files);
+    const imgs = all.filter((f) => f.type.startsWith("image/")).slice(0, Math.max(0, 8 - images.length));
+    const vids = all.filter((f) => f.type.startsWith("video/")).slice(0, Math.max(0, 3 - videos.length));
+    const errs: string[] = [];
+    let n = 0;
+    for (const f of imgs) {
+      setUpMsg(`جاري رفع الصور… ${++n}/${imgs.length + vids.length}`);
+      try { const u = await uploadImage(f, user, "products"); setImages((x) => [...x, u].slice(0, 8)); } catch { errs.push(`تعذّر رفع ${f.name}`); }
+    }
+    for (const f of vids) {
+      setUpMsg(`جاري رفع الفيديو… ${++n}/${imgs.length + vids.length} (ممكن ياخد دقيقة)`);
+      try { const u = await uploadVideo(f); setVideos((x) => [...x, u].slice(0, 3)); }
+      catch (e) { const m = (e as Error).message; errs.push(m === "too-big" ? `${f.name}: الفيديو أكبر من 100 ميجا` : `تعذّر رفع الفيديو ${f.name}`); }
+    }
+    if (all.some((f) => f.type.startsWith("video/")) && videos.length + vids.length >= 3 && all.filter((f) => f.type.startsWith("video/")).length > vids.length) errs.push("الحد 3 فيديوهات للمنتج.");
+    if (errs.length) setErr(errs.join(" · "));
+    setUpMsg(""); setUp(false);
   };
 
   const save = async () => {
@@ -68,7 +82,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     if (name.trim().length < 3) return setErr("اكتب اسم المنتج.");
     if (!categoryId) return setErr("اختار القسم.");
     if (!t.length) return setErr("حط سعر واحد على الأقل.");
-    if (!images.length) return setErr("ارفع صورة واحدة على الأقل.");
+    if (!images.length) return setErr("ارفع صورة واحدة على الأقل (الفيديو لوحده مش كفاية، الصورة هي اللي بتظهر في الكارت).");
     const inline = images.filter((u) => u.startsWith("data:")).reduce((a, u) => a + u.length, 0);
     if (inline > 850_000) return setErr("الصور حجمها كبير على قاعدة البيانات (Storage مش مفعّل). احذف صورة أو اتنين وجرّب تاني، أو فعّل Storage في Firebase.");
     const m = Math.max(1, Number(moq) || 1);
@@ -77,7 +91,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     const data = {
       name: name.trim(), description: description.trim(), categoryId, categoryName: cat?.name ?? "",
       unit, moq: m, tiers: t.sort((a, b) => a.min - b.min), governorate,
-      images, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
+      images, videos, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
       specs: specs.filter((s) => s.k.trim() && s.v.trim()), cod, madeInEgypt: made, logoPrint: logo,
       status: isAdmin ? status : (p?.status ?? "active"),
       keywords: Array.from(new Set(`${name} ${cat?.name ?? ""}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
@@ -101,16 +115,14 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     <div className="card col" style={{ gap: 16 }}>
       <h3>{p ? "تعديل المنتج" : "إضافة منتج جديد"}</h3>
       {images.some(isLowQuality) && <div className="alert w">الصور اتحفظت بجودة منخفضة لأن مفيش مكان تخزين صور مفعّل (Firebase Storage أو Cloudinary). فعّل واحد منهم والصور هتترفع بجودتها الأصلية.</div>}
-      <div className="fld"><label>صور المنتج (حتى 8) <small>— الأولى هي اللي بتظهر في الكارت. اسحب الصورة أو استخدم الأسهم لترتيبها، والنجمة تخليها الرئيسية.</small></label>
-        {images.length === 0 && <label className="drop" style={{ minHeight: 150 }}><i className="ph ph-camera" /><b style={{ color: "var(--pd)" }}>{up ? "جاري رفع الصور…" : "إضافة صور المنتج"}</b><small>حتى 8 صور</small><input type="file" accept="image/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
+      <div className="fld"><label>صور وفيديوهات المنتج <small>— الأولى هي اللي بتظهر في الكارت. اسحب الصورة أو استخدم الأسهم لترتيبها، والنجمة تخليها الرئيسية.</small></label>
+        {images.length === 0 && videos.length === 0 && <label className="drop" style={{ minHeight: 150 }}><i className="ph ph-camera" /><b style={{ color: "var(--pd)" }}>{up ? upMsg || "جاري الرفع…" : "إضافة صور وفيديوهات المنتج"}</b><small>حتى 8 صور و3 فيديوهات (الفيديو لحد 100 ميجا)</small><input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         <div className="thumbs">
-          {images.map((u, i) => (
-            <div key={u.slice(-30) + i} className={`t${drag === i ? " drag" : ""}`} draggable
-              onDragStart={() => setDrag(i)} onDragEnd={() => setDrag(-1)}
-              onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (drag >= 0) move(drag, i); setDrag(-1); }}>
-              <img src={u} alt="" draggable={false} />
+          {imgDnd.list.map((u, i) => (
+            <div key={u.slice(-40)} className="t sortable" {...imgDnd.item(u)}>
+              <img src={u} alt="" draggable={false} {...imgDnd.handle(u)} />
               {i === 0 && <span className="main">الرئيسية</span>}
-              <button type="button" aria-label="حذف" onClick={() => setImages(images.filter((_, j) => j !== i))}>×</button>
+              <button type="button" aria-label="حذف" onClick={() => setImages(images.filter((x) => x !== u))}>×</button>
               <div className="mv">
                 <button type="button" aria-label="لقدّام" disabled={i === 0} onClick={() => move(i, i - 1)}><i className="ph ph-caret-right" /></button>
                 {i > 0 && <button type="button" aria-label="اجعلها الرئيسية" onClick={() => move(i, 0)}><i className="ph ph-star" /></button>}
@@ -118,7 +130,14 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
               </div>
             </div>
           ))}
-          {images.length > 0 && images.length < 8 && <label className="btn o" style={{ width: 84, height: 84, flexDirection: "column", padding: 0, minHeight: 0 }}><i className="ph ph-camera-plus" /><small>{up ? "..." : "ارفع"}</small><input type="file" accept="image/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
+          {videos.map((v) => (
+            <div key={v} className="t vid">
+              <video src={v} poster={videoPoster(v)} muted playsInline preload="metadata" />
+              <span className="main" style={{ background: "var(--pd)" }}><i className="ph ph-play" style={{ fontSize: 11 }} /> فيديو</span>
+              <button type="button" aria-label="حذف الفيديو" onClick={() => setVideos(videos.filter((x) => x !== v))}>×</button>
+            </div>
+          ))}
+          {(images.length > 0 || videos.length > 0) && (images.length < 8 || videos.length < 3) && <label className="btn o" style={{ width: 104, height: 104, flexDirection: "column", padding: 0, minHeight: 0, whiteSpace: "normal" }}><i className="ph ph-camera-plus" /><small>{up ? "..." : "صورة / فيديو"}</small><input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         </div>
       </div>
       <div className="fld"><label>اسم المنتج</label><input className="in" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: كوبايات زجاج 250 مل" /></div>
@@ -173,7 +192,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
       </div>
       {isAdmin && <div className="fld" style={{ maxWidth: 240 }}><label>الحالة</label><select className="in" value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}><option value="active">منشور</option><option value="pending">قيد المراجعة</option><option value="hidden">مخفي</option></select></div>}
       {err && <div className="alert e">{err}</div>}
-      <div className="row"><button className="btn" disabled={busy || up} onClick={save}>{up ? "استنى، الصور بتترفع…" : busy ? "جاري الحفظ…" : "حفظ المنتج"}</button><button className="btn o" type="button" onClick={() => router.push(back)}>إلغاء</button></div>
+      <div className="row"><button className="btn" disabled={busy || up} onClick={save}>{up ? (upMsg || "استنى، الملفات بتترفع…") : busy ? "جاري الحفظ…" : "حفظ المنتج"}</button><button className="btn o" type="button" onClick={() => router.push(back)}>إلغاء</button></div>
     </div>
   );
 }

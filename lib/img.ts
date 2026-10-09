@@ -50,3 +50,19 @@ export async function uploadImage(file: File, uid: string, folder: "products" | 
 }
 
 export const isLowQuality = (url: string) => url.startsWith("data:");
+
+/** Videos go to Cloudinary only (Firestore can't hold them). Returns an optimised MP4 URL. */
+export async function uploadVideo(file: File): Promise<string> {
+  if (!CLD || !PRESET) throw new Error("no-video-host");
+  if (file.size > 100_000_000) throw new Error("too-big");
+  const body = new FormData();
+  body.append("file", file);
+  body.append("upload_preset", PRESET);
+  body.append("folder", "al3ataba/videos");
+  const r = await withTimeout(fetch(`https://api.cloudinary.com/v1_1/${CLD}/video/upload`, { method: "POST", body }), 300000);
+  const j = await r.json();
+  if (!j.secure_url) throw new Error(j.error?.message || "upload");
+  return String(j.secure_url).replace("/upload/", "/upload/q_auto/").replace(/\.[a-z0-9]+$/i, ".mp4");
+}
+/** First-frame poster for a Cloudinary video URL. */
+export const videoPoster = (url: string) => url.replace("/upload/q_auto/", "/upload/so_0/").replace(/\.[a-z0-9]+$/i, ".jpg");

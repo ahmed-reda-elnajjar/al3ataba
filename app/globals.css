@@ -202,7 +202,6 @@ a.card:hover{border-color:var(--gold)}
 .ph-thumb{width:56px;height:56px;border-radius:10px;flex:none;object-fit:cover;background:var(--cream)}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap}
 .thumbs .t{position:relative;width:104px;height:104px;border-radius:12px;overflow:hidden;border:1px solid var(--bd);cursor:grab;background:#fff}
-.thumbs .t.drag{opacity:.4}
 .thumbs .t .main{position:absolute;top:4px;inset-inline-end:4px;background:var(--gold);color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:0 6px}
 .thumbs .t .mv{position:absolute;bottom:0;inset-inline:0;display:flex;justify-content:space-between;background:#0009;padding:2px}
 .thumbs .t .mv button{all:unset;cursor:pointer;color:#fff;width:28px;height:24px;display:grid;place-items:center;border-radius:6px}
@@ -303,3 +302,16 @@ a.card:hover{border-color:var(--gold)}
 .lb-it{flex:0 0 100%;scroll-snap-align:center;display:grid;place-items:center;padding-bottom:env(safe-area-inset-bottom)}
 .lb-it img{max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom}
 .lb .gnav{top:50%}
+
+/* drag & drop sorting */
+.grip{all:unset;display:grid;place-items:center;width:34px;height:44px;border-radius:8px;color:var(--mu);flex:none;touch-action:none;cursor:grab}
+.grip:hover{background:var(--cream)}.grip i{font-size:22px}
+.sortable[data-dragging]{box-shadow:0 10px 30px #0a342740;border-color:var(--gold);opacity:.92;position:relative;z-index:5;transform:scale(1.01)}
+.thumbs .t.sortable[data-dragging]{transform:scale(1.06)}
+
+/* videos */
+.gsl-it.vid{cursor:default;background:#000}
+.gsl-it video,.lb-it video{width:100%;height:100%;object-fit:contain;background:#000}
+.lb-it video{max-height:100%}
+.gplay{position:absolute;inset:0;margin:auto;width:30px;height:30px;font-size:30px!important;color:#fff;filter:drop-shadow(0 1px 3px #0008)}
+.thumbs .t.vid{cursor:default;background:#000}.thumbs .t video{width:100%;height:100%;object-fit:cover}

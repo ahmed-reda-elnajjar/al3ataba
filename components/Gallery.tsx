@@ -19,14 +19,19 @@ function useSlider(count: number) {
   return { ref, i, onScroll, go };
 }
 
-export function Gallery({ images, children }: { images: string[]; children?: React.ReactNode }) {
-  const list = images.length ? images : [""];
+const isVid = (u: string) => u.startsWith("vid:");
+const src = (u: string) => (isVid(u) ? u.slice(4) : u);
+const poster = (u: string) => src(u).replace("/upload/q_auto/", "/upload/so_0/").replace(/\.[a-z0-9]+$/i, ".jpg");
+
+export function Gallery({ images, videos = [], children }: { images: string[]; videos?: string[]; children?: React.ReactNode }) {
+  const media = [...images, ...videos.map((v) => "vid:" + v)];
+  const list = media.length ? media : [""];
   const main = useSlider(list.length);
   const [open, setOpen] = useState(false);
   const full = useSlider(list.length);
 
   useEffect(() => { main.go(0, false); /* new product */ // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [images.join("|")]);
+  }, [list.join("|")]);
   useEffect(() => {
     if (!open) return;
     requestAnimationFrame(() => full.go(main.i, false));
@@ -52,9 +57,11 @@ export function Gallery({ images, children }: { images: string[]; children?: Rea
       <div style={{ position: "relative" }}>
       {children}
       <div className="gsl" ref={main.ref} onScroll={main.onScroll}>
-        {list.map((src, k) => (
-          <button type="button" key={k} className="gsl-it" onClick={() => src && setOpen(true)} aria-label="تكبير الصورة">
-            {src ? <img src={src} alt="" loading={k ? "lazy" : "eager"} draggable={false} /> : <i className="ph ph-package" />}
+        {list.map((u, k) => isVid(u) ? (
+          <div key={k} className="gsl-it vid"><video src={src(u)} poster={poster(u)} controls playsInline preload="metadata" /></div>
+        ) : (
+          <button type="button" key={k} className="gsl-it" onClick={() => u && setOpen(true)} aria-label="تكبير الصورة">
+            {u ? <img src={u} alt="" loading={k ? "lazy" : "eager"} draggable={false} /> : <i className="ph ph-package" />}
           </button>
         ))}
       </div>
@@ -69,14 +76,14 @@ export function Gallery({ images, children }: { images: string[]; children?: Rea
       {list.length > 1 && (
         <>
           <div className="dots" style={{ marginTop: 10 }}>{list.map((_, k) => <i key={k} className={k === main.i ? "on" : ""} style={{ background: k === main.i ? "var(--gold)" : "var(--bd)" }} />)}</div>
-          <div className="gal">{list.map((s, k) => <button type="button" key={k} className={k === main.i ? "on" : ""} onClick={() => main.go(k)}><span className="img" style={{ aspectRatio: "1" }}><img src={s} alt="" /></span></button>)}</div>
+          <div className="gal">{list.map((u, k) => <button type="button" key={k} className={k === main.i ? "on" : ""} onClick={() => main.go(k)}><span className="img" style={{ aspectRatio: "1" }}><img src={isVid(u) ? poster(u) : u} alt="" />{isVid(u) && <i className="ph ph-play-circle gplay" />}</span></button>)}</div>
         </>
       )}
       {open && (
         <div className="lb" role="dialog" aria-label="عرض الصور">
           <div className="lb-top"><span>{full.i + 1} / {list.length}</span><button type="button" onClick={close} aria-label="إغلاق"><i className="ph ph-x" /></button></div>
           <div className="lb-sl" ref={full.ref} onScroll={full.onScroll}>
-            {list.map((src, k) => <div key={k} className="lb-it"><img src={src} alt="" draggable={false} /></div>)}
+            {list.map((u, k) => <div key={k} className="lb-it">{isVid(u) ? <video src={src(u)} poster={poster(u)} controls playsInline preload="metadata" /> : <img src={u} alt="" draggable={false} />}</div>)}
           </div>
           {list.length > 1 && (
             <>
