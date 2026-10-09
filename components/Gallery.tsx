@@ -30,7 +30,18 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
   const [open, setOpen] = useState(false);
   // each video keeps its own frame shape (e.g. 9:16 reels) instead of being squeezed into the square box
   const [ratio, setRatio] = useState<Record<number, number>>({});
-  const curRatio = isVid(list[main.i] || "") ? ratio[main.i] ?? 9 / 16 : 1;
+  // measure every photo/video (videos via their poster frame — iPhone doesn't load video metadata until play)
+  useEffect(() => {
+    list.forEach((u, k) => {
+      if (!u) return;
+      const im = new Image();
+      im.onload = () => { if (im.naturalWidth && im.naturalHeight) setRatio((r) => (r[k] ? r : { ...r, [k]: im.naturalWidth / im.naturalHeight })); };
+      im.src = isVid(u) ? poster(u) : u;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.join("|")]);
+  const raw = ratio[main.i] ?? (isVid(list[main.i] || "") ? 9 / 16 : 1);
+  const curRatio = Math.round(Math.min(16 / 9, Math.max(9 / 16, raw)) * 1000) / 1000;
   // the frame width can change with the ratio; keep the current slide aligned
   useEffect(() => { requestAnimationFrame(() => main.go(main.i, false)); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curRatio]);
