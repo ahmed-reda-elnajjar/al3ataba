@@ -1,5 +1,5 @@
 // Client-side hint only. The real enforcement is in firestore.rules (keep the two in sync).
-export const ADMIN_EMAILS = ["a7mdelnagar297@gmail.com"];
+export const ADMIN_EMAILS = ["a7mdelnagar297@gmail.com", "ssomaia229@gmail.com"];
 
 export const GOVERNORATES = ["القاهرة", "الجيزة", "الإسكندرية", "القليوبية", "الشرقية", "الدقهلية", "البحيرة", "الغربية", "المنوفية", "كفر الشيخ", "دمياط", "بورسعيد", "الإسماعيلية", "السويس", "شمال سيناء", "جنوب سيناء", "الفيوم", "بني سويف", "المنيا", "أسيوط", "سوهاج", "قنا", "الأقصر", "أسوان", "البحر الأحمر", "الوادي الجديد", "مطروح"];
 export const MERCHANT_TYPES = ["مصنع", "مستورد", "تاجر جملة", "موزّع"];

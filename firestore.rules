@@ -7,7 +7,7 @@ service cloud.firestore {
     function realUser() { return signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
     function isAdmin() {
       return realUser() && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() in ['a7mdelnagar297@gmail.com'];
+        && request.auth.token.email.lower() in ['a7mdelnagar297@gmail.com', 'ssomaia229@gmail.com'];
     }
     function isApprovedMerchant() {
       return realUser() && exists(/databases/$(database)/documents/merchants/$(request.auth.uid))
