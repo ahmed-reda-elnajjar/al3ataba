@@ -7,7 +7,7 @@ import { fmt } from "@/lib/format";
 import { useAsync } from "@/lib/hooks";
 import { priceFor, sortTiers } from "@/lib/pricing";
 import { useApp } from "@/lib/providers";
-import { getMerchant, getProduct, listActiveProducts } from "@/lib/store";
+import { getMerchant, getProduct, sampleCategory } from "@/lib/store";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { HOUSE } from "@/lib/config";
 import { useFavs } from "@/lib/favs";
@@ -21,8 +21,8 @@ export default function ProductPage() {
   const { data, loading } = useAsync(async () => {
     const p = await getProduct(id);
     if (!p) return null;
-    const [merchant, all] = await Promise.all([p.merchantId === HOUSE.id ? null : getMerchant(p.merchantId), listActiveProducts()]);
-    return { p, merchant, similar: all.filter((x) => x.id !== p.id && x.categoryId === p.categoryId).slice(0, 4) };
+    const [merchant, similar] = await Promise.all([p.merchantId === HOUSE.id ? null : getMerchant(p.merchantId), sampleCategory(p.categoryId, 4, p.id).catch(() => [])]);
+    return { p, merchant, similar };
   }, [id]);
   const p = data?.p;
   const favs = useFavs();

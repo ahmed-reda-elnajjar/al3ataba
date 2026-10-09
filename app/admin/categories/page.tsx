@@ -1,4 +1,5 @@
 "use client";
+import { sized } from "@/lib/media";
 import { useState } from "react";
 import { addDoc, collection, deleteDoc, doc, updateDoc, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
@@ -77,7 +78,7 @@ export default function AdminCategories() {
             <div key={c.id} className="card row sortable" {...dnd.item(c.id)}>
               <button type="button" className="grip" aria-label="اسحب لترتيب القسم" {...dnd.handle(c.id)}><i className="ph ph-dots-six-vertical" /></button>
               <label title="صورة القسم" style={{ cursor: "pointer", position: "relative", flex: "none" }}>
-                {c.image ? <img src={c.image} alt="" className="ph-thumb" /> : <span className="ph-thumb" style={{ display: "grid", placeItems: "center", color: "var(--gold)" }}>{up === c.id ? "…" : <i className="ph ph-camera-plus" />}</span>}
+                {c.image ? <img src={sized(c.image, 120)} alt="" className="ph-thumb" /> : <span className="ph-thumb" style={{ display: "grid", placeItems: "center", color: "var(--gold)" }}>{up === c.id ? "…" : <i className="ph ph-camera-plus" />}</span>}
                 <input type="file" accept="image/*" hidden onChange={(e) => { setImg(c.id, e.target.files?.[0]); e.target.value = ""; }} />
               </label>
               <input className="in sp" defaultValue={c.name} onBlur={(e) => e.target.value !== c.name && rename(c.id, e.target.value)} />

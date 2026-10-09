@@ -1,12 +1,16 @@
 "use client";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+
+const PAGE = 24;
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { st } from "@/lib/style";
 import { GOVERNORATES } from "@/lib/config";
 import { useAsync } from "@/lib/hooks";
 import { priceRange } from "@/lib/pricing";
-import { listActiveProducts, listApprovedMerchants, listCategories } from "@/lib/store";
+import { allActiveProductsCached, listApprovedMerchants, listCategories, pageActiveProducts, type Page } from "@/lib/store";
+import { norm } from "@/components/SearchBox";
+import type { Product } from "@/lib/types";
 import { Empty, Loading, ProductCard } from "@/components/Ui";
 
 function Results() {
@@ -24,16 +28,33 @@ function Results() {
   const [logo, setLogo] = useState(false);
   const [sort, setSort] = useState("new");
   const [showF, setShowF] = useState(false);
-  const { data, loading } = useAsync(async () => {
-    const [products, cats, merchants] = await Promise.all([listActiveProducts(), listCategories(), listApprovedMerchants()]);
-    return { products, cats, verified: new Set(merchants.filter((m) => m.verified).map((m) => m.id)) };
+  const { data } = useAsync(async () => {
+    const [cats, merchants] = await Promise.all([listCategories(), listApprovedMerchants()]);
+    return { cats, verified: new Set(merchants.filter((m) => m.verified).map((m) => m.id)) };
   });
+  // Browsing (no text): 24 newest at a time. Text search: the cached catalogue (loaded once per visit).
+  const [items, setItems] = useState<Product[]>([]);
+  const [cursor, setCursor] = useState<Page["cursor"]>(null);
+  const [more, setMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busyMore, setBusyMore] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setLoading(true); setItems([]);
+    (q ? allActiveProductsCached().then((all) => ({ items: all, cursor: null, more: false } as Page)) : pageActiveProducts(PAGE, { cat }))
+      .then((r) => { if (!live) return; setItems(r.items); setCursor(r.cursor); setMore(r.more); setLoading(false); })
+      .catch(() => live && setLoading(false));
+    return () => { live = false; };
+  }, [q, cat]);
+  const loadMore = async () => {
+    setBusyMore(true);
+    try { const r = await pageActiveProducts(PAGE, { cat, after: cursor }); setItems((x) => [...x, ...r.items]); setCursor(r.cursor); setMore(r.more); } finally { setBusyMore(false); }
+  };
 
   const list = useMemo(() => {
-    if (!data) return [];
-    const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-    let a = data.products.filter((p) => {
-      const hay = `${p.name} ${p.description} ${p.categoryName} ${p.merchantName} ${(p.keywords || []).join(" ")}`.toLowerCase();
+    const terms = norm(q).split(" ").filter(Boolean);
+    let a = items.filter((p) => {
+      const hay = norm(`${p.name} ${p.description} ${p.categoryName} ${p.merchantName} ${(p.keywords || []).join(" ")}`);
       if (terms.some((t) => !hay.includes(t))) return false;
       if (cat && p.categoryId !== cat) return false;
       if (gov && p.governorate !== gov) return false;
@@ -41,7 +62,7 @@ function Results() {
       if (min && hi < Number(min)) return false;
       if (max && lo > Number(max)) return false;
       if (moq && p.moq > Number(moq)) return false;
-      if (vOnly && !data.verified.has(p.merchantId)) return false;
+      if (vOnly && !data?.verified.has(p.merchantId)) return false;
       if (cod && !p.cod) return false;
       if (mie && !p.madeInEgypt) return false;
       if (logo && !p.logoPrint) return false;
@@ -51,7 +72,7 @@ function Results() {
     if (sort === "moq") a = [...a].sort((x, y) => x.moq - y.moq);
     if (sort === "high") a = [...a].sort((x, y) => priceRange(y)[1] - priceRange(x)[1]);
     return a;
-  }, [data, q, cat, gov, min, max, moq, vOnly, cod, mie, logo, sort]);
+  }, [items, data, q, cat, gov, min, max, moq, vOnly, cod, mie, logo, sort]);
 
   const catName = data?.cats.find((c) => c.id === cat)?.name;
   const filters = (
@@ -74,7 +95,7 @@ function Results() {
   return (
     <div className="wc">
       <div className="row" style={{ marginBottom: 12 }}>
-        <div className="sp"><h1 style={{ fontSize: 22 }}>{q ? `نتائج: ${q}` : catName || "كل المنتجات"}</h1><small>{loading ? "…" : `${list.length} منتج`}</small></div>
+        <div className="sp"><h1 style={{ fontSize: 22 }}>{q ? `نتائج: ${q}` : catName || "كل المنتجات"}</h1><small>{loading ? "…" : `${list.length}${more ? "+" : ""} منتج`}</small></div>
         <button className={`ico sm${showF ? " on" : ""}`} style={{ width: 44, height: 44, borderRadius: 12 }} onClick={() => setShowF(!showF)} aria-label="فلترة"><i className="ph ph-funnel" /></button>
       </div>
       <div className="scr" style={{ marginBottom: 8 }}>
@@ -91,7 +112,7 @@ function Results() {
         <aside className="card hm" style={{ width: 270, flex: "none", flexDirection: "column" }}><b style={{ marginBottom: 10 }}>فلترة النتائج</b>{filters}</aside>
         <div className="sp">
           {loading ? <Loading rows={3} /> : list.length ? (
-            <div className="grid" style={st("--m:2;--d:4")}>{list.map((p) => <ProductCard key={p.id} p={p} verified={data?.verified.has(p.merchantId)} />)}</div>
+            <><div className="grid" style={st("--m:2;--d:4")}>{list.map((p) => <ProductCard key={p.id} p={p} verified={data?.verified.has(p.merchantId)} />)}</div>{more && !q && <div className="c mt2"><button className="btn o" disabled={busyMore} onClick={loadMore}>{busyMore ? "جاري التحميل…" : "عرض المزيد"}</button></div>}</>
           ) : (
             <Empty icon="ph-magnifying-glass" title="مفيش نتايج مطابقة" sub="جرّب كلمة تانية أو شيل بعض الفلاتر، أو اطلب المنتج والتجار يدوروا لك."><Link href="/rfq" className="btn">اطلب منتج</Link></Empty>
           )}

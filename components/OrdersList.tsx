@@ -37,7 +37,7 @@ export function OrdersList({ orders, role, onStatus }: Props) {
           {role === "buyer" && <Track s={o.status} />}
           {o.items.map((i) => (
             <div key={i.id} className="row">
-              <Img src={i.image} ic="ph-package" ratio={1} style={{ width: 48, borderRadius: 8, flex: "none" }} />
+              <Img src={i.image} ic="ph-package" ratio={1} w={120} style={{ width: 48, borderRadius: 8, flex: "none" }} />
               <div className="sp">{i.name}<br /><small>{i.qty} {i.unit} × {fmt(i.price)} ج.م</small></div>
               <b>{fmt(i.qty * i.price)} ج.م</b>
             </div>

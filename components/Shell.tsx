@@ -8,6 +8,7 @@ import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
 import { Logo, LogoBig, MarketArt, Skyline } from "./Brand";
 import { SearchBox } from "./SearchBox";
+import { sized } from "@/lib/media";
 
 export function Announcement() {
   const { settings } = useApp();
@@ -30,7 +31,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
     return () => { document.body.style.overflow = ""; };
   }, [open]);
   const L = ({ href, ic, t, img }: { href: string; ic: string; t: string; img?: string }) => (
-    <Link href={href} className="dl" onClick={onClose}>{img ? <img src={img} alt="" /> : <i className={`ph ${ic}`} />}{t}</Link>
+    <Link href={href} className="dl" onClick={onClose}>{img ? <img src={sized(img, 80)} alt="" loading="lazy" /> : <i className={`ph ${ic}`} />}{t}</Link>
   );
   return (
     <div className={`dr ${open ? "open" : ""}`} aria-hidden={!open}>

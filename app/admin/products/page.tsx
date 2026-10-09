@@ -1,4 +1,5 @@
 "use client";
+import { sized } from "@/lib/media";
 import Link from "next/link";
 import { useState } from "react";
 import { collection, deleteDoc, doc, getDocs, limit, query, updateDoc } from "firebase/firestore";
@@ -31,7 +32,7 @@ export default function AdminProducts() {
         <div className="col">
           {list.map((p) => (
             <div key={p.id} className="card row wrap">
-              {p.images?.[0] ? <img className="ph-thumb" src={p.images[0]} alt="" /> : <div className="ph-thumb" />}
+              {p.images?.[0] ? <img className="ph-thumb" src={sized(p.images[0], 120)} alt="" loading="lazy" /> : <div className="ph-thumb" />}
               <div className="sp" style={{ minWidth: 160 }}><b>{p.name}</b><br /><small>{p.merchantName} · {p.categoryName} · {rangeText(p)} ج.م</small></div>
               <Status s={p.status} />
               <Link className="btn o sm2" href={`/admin/products/${p.id}`}>تعديل</Link>

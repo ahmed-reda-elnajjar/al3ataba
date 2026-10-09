@@ -7,7 +7,7 @@ import { dbI } from "@/lib/firebase";
 import { fmt, dateStr, ms } from "@/lib/format";
 import { useAsync } from "@/lib/hooks";
 import { useApp } from "@/lib/providers";
-import { listActiveProducts, withId } from "@/lib/store";
+import { productsByIds, withId } from "@/lib/store";
 import { useFavs } from "@/lib/favs";
 import { st } from "@/lib/style";
 import type { Offer, Order, Rfq } from "@/lib/types";
@@ -20,7 +20,7 @@ function Body() {
   const router = useRouter();
   const [tab, setTab] = useState(useSearchParams().get("tab") || "");
   const favs = useFavs();
-  const { data: favProducts } = useAsync(async () => (tab === "favs" ? (await listActiveProducts()).filter((p) => favs.ids.includes(p.id)) : []), [tab, favs.ids.join(",")]);
+  const { data: favProducts } = useAsync(async () => (tab === "favs" && favs.ids.length ? productsByIds(favs.ids) : []), [tab, favs.ids.join(",")]);
   const uid = user?.uid || "";
   const { data, loading, reload } = useAsync(async () => {
     const [o, r, f] = await Promise.all([

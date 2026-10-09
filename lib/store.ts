@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
+import { collection, doc, documentId, getDoc, getDocs, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot } from "firebase/firestore";
 import { dbI } from "./firebase";
 import { DEFAULT_SETTINGS } from "./config";
 import { ms } from "./format";
@@ -36,4 +36,55 @@ export async function getSettings(): Promise<Settings> {
     const s = await getDoc(doc(dbI(), "settings", "site"));
     return { ...DEFAULT_SETTINGS, ...(s.exists() ? (s.data() as Partial<Settings>) : {}) };
   } catch { return DEFAULT_SETTINGS; }
+}
+
+/* ---------- scalable reads: only fetch what the page shows ---------- */
+
+// The full catalogue is only needed for free-text search; load it at most once per visit.
+let allCache: { at: number; p: Promise<Product[]> } | null = null;
+export function allActiveProductsCached(): Promise<Product[]> {
+  if (!allCache || Date.now() - allCache.at > 10 * 60_000) {
+    allCache = { at: Date.now(), p: listActiveProducts().catch((e) => { allCache = null; throw e; }) };
+  }
+  return allCache.p;
+}
+
+const missingIndex = (e: unknown) => {
+  const msg = String((e as { message?: string })?.message || "");
+  if (msg.includes("index")) console.warn("[al3ataba] Firestore index needed — open this link once to create it:", msg.match(/https:\/\/\S+/)?.[0] || msg);
+  return true;
+};
+
+export type Page = { items: Product[]; cursor: QueryDocumentSnapshot | null; more: boolean };
+
+/** Newest active products, page by page (optionally inside one category). Needs composite indexes (see firestore.indexes.json);
+ *  if an index is still missing it falls back to the old "load all" read so the site never breaks. */
+export async function pageActiveProducts(size: number, opts: { cat?: string; after?: QueryDocumentSnapshot | null } = {}): Promise<Page> {
+  const base = [where("status", "==", "active"), ...(opts.cat ? [where("categoryId", "==", opts.cat)] : [])];
+  try {
+    const q = query(collection(dbI(), "products"), ...base, orderBy("createdAt", "desc"), ...(opts.after ? [startAfter(opts.after)] : []), limit(size + 1));
+    const s = await getDocs(q);
+    const docs = s.docs.slice(0, size);
+    return { items: docs.map((d) => withId<Product>(d)), cursor: docs[docs.length - 1] ?? null, more: s.docs.length > size };
+  } catch (e) {
+    missingIndex(e);
+    const all = (await allActiveProductsCached()).filter((p) => !opts.cat || p.categoryId === opts.cat);
+    return { items: opts.after ? [] : all, cursor: null, more: false };
+  }
+}
+
+/** A few products from the same category (product page "similar", categories page preview). Equality filters only → no index needed. */
+export async function sampleCategory(cat: string, n: number, exclude = ""): Promise<Product[]> {
+  const s = await getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where("categoryId", "==", cat), limit(n + 1)));
+  return s.docs.map((d) => withId<Product>(d)).filter((p) => p.id !== exclude).slice(0, n);
+}
+
+/** Specific products by id (favourites), 30 per query. */
+export async function productsByIds(ids: string[]): Promise<Product[]> {
+  const out: Product[] = [];
+  for (let i = 0; i < ids.length; i += 30) {
+    const s = await getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where(documentId(), "in", ids.slice(i, i + 30))));
+    out.push(...s.docs.map((d) => withId<Product>(d)));
+  }
+  return ids.map((id) => out.find((p) => p.id === id)).filter(Boolean) as Product[];
 }

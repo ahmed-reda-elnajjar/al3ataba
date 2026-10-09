@@ -5,11 +5,12 @@ import { priceFor, rangeText } from "@/lib/pricing";
 import { useApp } from "@/lib/providers";
 import { useFavs } from "@/lib/favs";
 import { isVideoUrl, videoPoster } from "@/lib/img";
+import { sized } from "@/lib/media";
 
-export function Img({ src, ic = "ph-image", ratio = 1, className = "", style }: { src?: string; ic?: string; ratio?: number; className?: string; style?: React.CSSProperties }) {
+export function Img({ src, ic = "ph-image", ratio = 1, className = "", style, w = 600 }: { src?: string; ic?: string; ratio?: number; className?: string; style?: React.CSSProperties; w?: number }) {
   return (
     <div className={`img ${className}`} style={{ aspectRatio: String(ratio), ...style }}>
-      {src ? <img src={src} alt="" loading="lazy" /> : <i className={`ph ${ic}`} />}
+      {src ? <img src={sized(src, w)} alt="" loading="lazy" decoding="async" /> : <i className={`ph ${ic}`} />}
     </div>
   );
 }
@@ -25,7 +26,7 @@ export function ProductCard({ p, verified }: { p: Product; verified?: boolean })
     <div className="pc">
       <button className={`ico fav${fav ? " on" : ""}`} aria-label="المفضلة" onClick={() => favs.toggle(p.id)}><i className={`ph${fav ? "-fill" : ""} ph-heart`} /></button>
       <Link href={`/product/${p.id}`} style={{ position: "relative", display: "block" }}>
-        <Img src={coverVideo ? videoPoster(coverVideo) : p.images?.[0]} ic="ph-package" ratio={1} />
+        <Img src={coverVideo ? videoPoster(coverVideo) : p.images?.[0]} ic="ph-package" ratio={1} w={420} />
         {coverVideo && <span className="vbadge"><i className="ph ph-play" /></span>}
       </Link>
       <div className="bodyc">

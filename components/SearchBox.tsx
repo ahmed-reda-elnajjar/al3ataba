@@ -2,8 +2,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { listActiveProducts, listCategories } from "@/lib/store";
+import { allActiveProductsCached, listCategories } from "@/lib/store";
 import { rangeText } from "@/lib/pricing";
+import { sized } from "@/lib/media";
 import type { Category, Product } from "@/lib/types";
 
 // Normalise Arabic so "أ/إ/ا", "ة/ه", "ى/ي" and diacritics match each other.
@@ -11,7 +12,7 @@ export const norm = (s: string) => s.toLowerCase().replace(/[ً-ْـ]/g, "").rep
 
 // Loaded once per page visit and shared by every search box.
 let cache: Promise<{ products: Product[]; cats: Category[] }> | null = null;
-const load = () => (cache ??= Promise.all([listActiveProducts(), listCategories()]).then(([products, cats]) => ({ products, cats })).catch(() => { cache = null; return { products: [], cats: [] }; }));
+const load = () => (cache ??= Promise.all([allActiveProductsCached(), listCategories()]).then(([products, cats]) => ({ products, cats })).catch(() => { cache = null; return { products: [], cats: [] }; }));
 
 export function SearchBox({ className, style }: { className: string; style?: React.CSSProperties }) {
   const router = useRouter();
@@ -73,7 +74,7 @@ export function SearchBox({ className, style }: { className: string; style?: Rea
               ); })}
               {res.products.map((p, j) => { const i = res.words.length + res.cats.length + j; return (
                 <Link key={p.id} href={`/product/${p.id}`} className={`sg${hi === i ? " on" : ""}`} onMouseEnter={() => setHi(i)} onClick={() => setOpen(false)}>
-                  {p.images?.[0] ? <img src={p.images[0]} alt="" /> : <i className="ph ph-package" />}
+                  {p.images?.[0] ? <img src={sized(p.images[0], 100)} alt="" /> : <i className="ph ph-package" />}
                   <span className="sp nm1">{p.name}</span><b className="price" style={{ fontSize: 13 }}>{rangeText(p)} ج.م</b>
                 </Link>
               ); })}

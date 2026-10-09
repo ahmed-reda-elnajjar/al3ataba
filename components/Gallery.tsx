@@ -1,4 +1,5 @@
 "use client";
+import { sized } from "@/lib/media";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /* Swipeable product gallery (scroll-snap) + full-screen viewer. Works with touch, mouse wheel/trackpad, arrows and keyboard. */
@@ -36,7 +37,7 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
       if (!u) return;
       const im = new Image();
       im.onload = () => { if (im.naturalWidth && im.naturalHeight) setRatio((r) => (r[k] ? r : { ...r, [k]: im.naturalWidth / im.naturalHeight })); };
-      im.src = isVid(u) ? poster(u) : u;
+      im.src = sized(isVid(u) ? poster(u) : u, 1000);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.join("|")]);
@@ -75,10 +76,10 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
       {children}
       <div className="gsl" ref={main.ref} onScroll={main.onScroll} style={{ aspectRatio: String(curRatio), width: `min(100%, calc(82vh * ${curRatio}))` }}>
         {list.map((u, k) => isVid(u) ? (
-          <div key={k} className="gsl-it vid"><video src={src(u)} poster={poster(u)} controls playsInline preload="metadata" onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setRatio((r) => ({ ...r, [k]: v.videoWidth / v.videoHeight })); }} /></div>
+          <div key={k} className="gsl-it vid"><video src={src(u)} poster={sized(poster(u), 1000)} controls playsInline preload="none" onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setRatio((r) => ({ ...r, [k]: v.videoWidth / v.videoHeight })); }} /></div>
         ) : (
           <button type="button" key={k} className="gsl-it" onClick={() => u && setOpen(true)} aria-label="تكبير الصورة">
-            {u ? <img src={u} alt="" loading={k ? "lazy" : "eager"} draggable={false} /> : <i className="ph ph-package" />}
+            {u ? <img src={sized(u, 1000)} alt="" loading={k ? "lazy" : "eager"} draggable={false} /> : <i className="ph ph-package" />}
           </button>
         ))}
       </div>
@@ -93,7 +94,7 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
       {list.length > 1 && (
         <>
           <div className="dots" style={{ marginTop: 10 }}>{list.map((_, k) => <i key={k} className={k === main.i ? "on" : ""} style={{ background: k === main.i ? "var(--gold)" : "var(--bd)" }} />)}</div>
-          <div className="gal">{list.map((u, k) => <button type="button" key={k} className={k === main.i ? "on" : ""} onClick={() => main.go(k)}><span className="img" style={{ aspectRatio: "1" }}><img src={isVid(u) ? poster(u) : u} alt="" />{isVid(u) && <i className="ph ph-play-circle gplay" />}</span></button>)}</div>
+          <div className="gal">{list.map((u, k) => <button type="button" key={k} className={k === main.i ? "on" : ""} onClick={() => main.go(k)}><span className="img" style={{ aspectRatio: "1" }}><img src={sized(isVid(u) ? poster(u) : u, 160)} alt="" loading="lazy" />{isVid(u) && <i className="ph ph-play-circle gplay" />}</span></button>)}</div>
         </>
       )}
       {open && (

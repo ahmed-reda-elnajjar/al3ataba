@@ -29,7 +29,7 @@ export default function Cart() {
               <div className="row"><b className="sp">{list[0].merchant}</b><span className="bd g">طلب منفصل</span></div>
               {list.map((i) => (
                 <div key={i.id} className="row">
-                  <Img src={i.image} ic="ph-package" ratio={1} style={{ width: 72, borderRadius: 12, flex: "none", background: "#fff", border: "1px solid var(--bd)" }} />
+                  <Img src={i.image} ic="ph-package" ratio={1} w={160} style={{ width: 72, borderRadius: 12, flex: "none", background: "#fff", border: "1px solid var(--bd)" }} />
                   <div className="sp col g4">
                     <b>{i.name}</b>
                     <small>{fmt(i.price)} ج.م / {i.unit}</small>

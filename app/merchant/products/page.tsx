@@ -1,4 +1,5 @@
 "use client";
+import { sized } from "@/lib/media";
 import Link from "next/link";
 import { collection, deleteDoc, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
@@ -25,7 +26,7 @@ export default function MerchantProducts() {
         <div className="col">
           {data.map((p) => (
             <div key={p.id} className="card row wrap">
-              {p.images?.[0] ? <img className="ph-thumb" src={p.images[0]} alt="" /> : <div className="ph-thumb" />}
+              {p.images?.[0] ? <img className="ph-thumb" src={sized(p.images[0], 120)} alt="" loading="lazy" /> : <div className="ph-thumb" />}
               <div className="sp" style={{ minWidth: 160 }}><b>{p.name}</b><br /><small>{p.categoryName} · {rangeText(p)} ج.م / {p.unit}</small></div>
               <Status s={p.status} />
               <Link className="btn o sm2" href={`/merchant/products/${p.id}`}>تعديل</Link>

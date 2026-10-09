@@ -9,6 +9,7 @@ import { listCategories } from "@/lib/store";
 import { isLowQuality, isVideoUrl, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
 import { COLORS, swatch } from "@/lib/colors";
 import { useDragSort } from "@/lib/dnd";
+import { sized } from "@/lib/media";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
 
@@ -122,7 +123,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         <div className="thumbs">
           {imgDnd.list.map((u, i) => (
             <div key={u.slice(-40)} className={`t sortable${isVideoUrl(u) ? " vid" : ""}`} {...imgDnd.item(u)}>
-              {isVideoUrl(u) ? <video src={u} poster={videoPoster(u)} muted playsInline preload="metadata" {...imgDnd.handle(u)} /> : <img src={u} alt="" draggable={false} {...imgDnd.handle(u)} />}
+              {isVideoUrl(u) ? <video src={u} poster={videoPoster(u)} muted playsInline preload="metadata" {...imgDnd.handle(u)} /> : <img src={sized(u, 240)} alt="" draggable={false} {...imgDnd.handle(u)} />}
               {i === 0 ? <span className="main">الرئيسية</span> : isVideoUrl(u) ? <span className="main" style={{ background: "var(--pd)" }}><i className="ph ph-play" style={{ fontSize: 11 }} /> فيديو</span> : null}
               <button type="button" aria-label="حذف" onClick={() => setMedia(media.filter((x) => x !== u))}>×</button>
               <div className="mv">

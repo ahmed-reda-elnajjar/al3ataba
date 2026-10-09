@@ -3,14 +3,16 @@ import Link from "next/link";
 import { st } from "@/lib/style";
 import { useAsync } from "@/lib/hooks";
 import { useApp } from "@/lib/providers";
-import { listActiveProducts, listApprovedMerchants, listCategories } from "@/lib/store";
+import { listApprovedMerchants, listCategories, pageActiveProducts } from "@/lib/store";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { Skyline } from "@/components/Brand";
+import { sized } from "@/lib/media";
 
 export default function Home() {
   const { isAdmin, settings } = useApp();
   const { data, loading } = useAsync(async () => {
-    const [products, cats, merchants] = await Promise.all([listActiveProducts(), listCategories(), listApprovedMerchants()]);
+    const [page, cats, merchants] = await Promise.all([pageActiveProducts(10), listCategories(), listApprovedMerchants()]);
+    const products = page.items;
     return { products, cats, merchants };
   });
   const verified = new Set((data?.merchants ?? []).filter((m) => m.verified).map((m) => m.id));
@@ -20,7 +22,7 @@ export default function Home() {
     <div className="wc">
       {/* hero banner */}
       <section className="hero2" style={{ marginBottom: 20 }}>
-        {settings.heroImage ? <img className="bg" src={settings.heroImage} alt="" /> : <Skyline className="sky" />}
+        {settings.heroImage ? <img className="bg" src={sized(settings.heroImage, 1600)} alt="" /> : <Skyline className="sky" />}
         <div className="sh" />
         <div className="tx">
           <h1>{settings.heroTitle || "منتجات الجملة بأسعار حقيقية"}</h1>
@@ -34,7 +36,7 @@ export default function Home() {
         <div className="scr" style={{ gap: 14, marginBottom: 22 }}>
           {cats.map((c) => (
             <Link key={c.id} href={`/search?cat=${c.id}`} className="cat">
-              <span className="circ">{c.image ? <img src={c.image} alt="" /> : <i className={`ph ${c.icon}`} />}</span>{c.name}
+              <span className="circ">{c.image ? <img src={sized(c.image, 160)} alt="" loading="lazy" /> : <i className={`ph ${c.icon}`} />}</span>{c.name}
             </Link>
           ))}
         </div>
@@ -47,7 +49,7 @@ export default function Home() {
           <div className="grid" style={st("--m:3;--d:6")}>
             {cats.slice(0, 6).map((c) => (
               <Link key={c.id} href={`/search?cat=${c.id}`} className="tile">
-                <Img src={c.image} ic={c.icon} ratio={1} />
+                <Img src={c.image} ic={c.icon} ratio={1} w={300} />
                 <span>{c.name}</span>
               </Link>
             ))}
