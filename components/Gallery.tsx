@@ -28,6 +28,12 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
   const list = media.length ? media : [""];
   const main = useSlider(list.length);
   const [open, setOpen] = useState(false);
+  // each video keeps its own frame shape (e.g. 9:16 reels) instead of being squeezed into the square box
+  const [ratio, setRatio] = useState<Record<number, number>>({});
+  const curRatio = isVid(list[main.i] || "") ? ratio[main.i] ?? 9 / 16 : 1;
+  // the frame width can change with the ratio; keep the current slide aligned
+  useEffect(() => { requestAnimationFrame(() => main.go(main.i, false)); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [curRatio]);
   const full = useSlider(list.length);
 
   useEffect(() => { main.go(0, false); /* new product */ // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -56,9 +62,9 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
     <div>
       <div style={{ position: "relative" }}>
       {children}
-      <div className="gsl" ref={main.ref} onScroll={main.onScroll}>
+      <div className="gsl" ref={main.ref} onScroll={main.onScroll} style={{ aspectRatio: String(curRatio), width: `min(100%, calc(82vh * ${curRatio}))` }}>
         {list.map((u, k) => isVid(u) ? (
-          <div key={k} className="gsl-it vid"><video src={src(u)} poster={poster(u)} controls playsInline preload="metadata" /></div>
+          <div key={k} className="gsl-it vid"><video src={src(u)} poster={poster(u)} controls playsInline preload="metadata" onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setRatio((r) => ({ ...r, [k]: v.videoWidth / v.videoHeight })); }} /></div>
         ) : (
           <button type="button" key={k} className="gsl-it" onClick={() => u && setOpen(true)} aria-label="تكبير الصورة">
             {u ? <img src={u} alt="" loading={k ? "lazy" : "eager"} draggable={false} /> : <i className="ph ph-package" />}
