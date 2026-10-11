@@ -12,6 +12,7 @@ const MENU = [
   { href: "/admin/orders", t: "الطلبات", ic: "ph-receipt", k: "newOrders" },
   { href: "/admin/categories", t: "الأقسام وترتيبها", ic: "ph-list-numbers", k: "" },
   { href: "/admin/import", t: "استيراد منتجات من تليجرام", ic: "ph-telegram-logo", k: "" },
+  { href: "/admin/import-site", t: "استيراد منتجات من موقع تاجر", ic: "ph-globe", k: "" },
   { href: "/admin/rfqs", t: "طلبات عروض الأسعار", ic: "ph-clipboard-text", k: "rfqs" },
   { href: "/admin/settings", t: "الإعدادات والبانر", ic: "ph-gear", k: "" },
 ] as const;

@@ -68,3 +68,16 @@ export async function uploadVideo(file: File): Promise<string> {
 export const videoPoster = (url: string) => url.replace("/upload/q_auto/", "/upload/so_0/").replace(/\.[a-z0-9]+$/i, ".jpg");
 
 export const isVideoUrl = (u: string) => /\/video\/upload\//.test(u);
+
+/** Copy a remote image (e.g. from a partner's store) into our Cloudinary. Throws if Cloudinary refuses. */
+export async function uploadFromUrl(url: string, folder = "al3ataba/imported"): Promise<string> {
+  if (!CLD || !PRESET) throw new Error("no-host");
+  const body = new FormData();
+  body.append("file", url);
+  body.append("upload_preset", PRESET);
+  body.append("folder", folder);
+  const r = await withTimeout(fetch(`https://api.cloudinary.com/v1_1/${CLD}/image/upload`, { method: "POST", body }), 60000);
+  const j = await r.json();
+  if (!j.secure_url) throw new Error(j.error?.message || "upload");
+  return String(j.secure_url).replace("/upload/", "/upload/f_auto,q_auto:best/");
+}
