@@ -19,20 +19,20 @@ import { swatch } from "@/lib/colors";
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { add, items, isAdmin } = useApp();
+  const { add, items, isAdmin, withPromo } = useApp();
   const { data, loading } = useAsync(async () => {
     const p = await getProduct(id);
     if (!p) return null;
     const [merchant, similar] = await Promise.all([p.merchantId === HOUSE.id ? null : getMerchant(p.merchantId), sampleCategory(p.categoryId, 4, p.id).catch(() => [])]);
     return { p, merchant, similar };
   }, [id]);
-  const p = data?.p;
+  const p = data?.p ? withPromo(data.p) : undefined;
   const favs = useFavs();
   const [qty, setQty] = useState(0);
   const [color, setColor] = useState("");
-  useEffect(() => { if (p) { setQty(p.moq); setColor(p.colors?.[0] || ""); } }, [p]);
-  useEffect(() => { if (p) track("view", p); }, [p]);
-  useEffect(() => { if (p) document.title = `${p.name} | العتبة`; }, [p]);
+  useEffect(() => { if (data?.p) { setQty(data.p.moq); setColor(data.p.colors?.[0] || ""); } }, [data?.p]);
+  useEffect(() => { if (data?.p) track("view", data.p); }, [data?.p]);
+  useEffect(() => { if (data?.p) document.title = `${data.p.name} | العتبة`; }, [data?.p]);
 
   if (loading) return <div className="wc"><Loading rows={2} /></div>;
   if (!p) return <div className="wc"><Empty icon="ph-package" title="المنتج مش موجود أو اتشال"><Link href="/search" className="btn">تصفّح المنتجات</Link></Empty></div>;
@@ -43,7 +43,7 @@ export default function ProductPage() {
   const inCart = items.some((i) => i.id === cartId);
   const addToCart = () => {
     track("cart", p);
-    add({ id: cartId, productId: p.id, name: color ? `${p.name} (${color})` : p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: q, price: priceFor(p.tiers, q), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod });
+    add({ id: cartId, productId: p.id, name: color ? `${p.name} (${color})` : p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: q, price: priceFor(p.tiers, q), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod, ...(p.promo ? { promo: p.promo.label } : {}) });
     router.push("/cart");
   };
   const tiers = sortTiers(p.tiers);
@@ -61,8 +61,9 @@ export default function ProductPage() {
             {p.madeInEgypt && <span className="bd">صنع في مصر</span>}{p.cod && <span className="bd">يقبل الدفع عند الاستلام</span>}{p.logoPrint && <span className="bd">طباعة لوجو</span>}
           </div>
           <h1 style={{ fontSize: 24 }}>{p.name}</h1>
+          {p.promo && <Link href={`/offers?id=${p.promo.id}`} className="promo-line" style={p.promo.color ? { background: p.promo.color } : undefined}><i className="ph-fill ph-tag" /><b>{p.promo.label}</b><span className="sp">{p.promo.title}</span><i className="ph ph-caret-left" /></Link>}
           {(p.packSize ?? 0) > 1 && <div className="alert row g8" style={{ padding: "8px 12px" }}><i className="ph ph-stack" style={{ color: "var(--gold)" }} /><span>بيتباع <b>{p.unit} كاملة</b> فيها <b>{p.packSize} قطعة</b> · سعر القطعة ≈ <b>{fmt(price / (p.packSize as number))} ج.م</b></span></div>}
-          <div className="row" style={{ alignItems: "baseline" }}><span className="price" style={{ fontSize: 28 }}>{fmt(price)} <small>ج.م / {p.unit}{(p.packSize ?? 0) > 1 ? ` (${p.packSize} قطعة)` : ""}</small></span>{tiers.length > 1 && <span className="old" style={{ textDecoration: "none" }}>من {fmt(tiers[tiers.length - 1].price)} لـ {fmt(tiers[0].price)} حسب الكمية</span>}</div>
+          <div className="row" style={{ alignItems: "baseline" }}><span className="price" style={{ fontSize: 28 }}>{fmt(price)} <small>ج.م / {p.unit}{(p.packSize ?? 0) > 1 ? ` (${p.packSize} قطعة)` : ""}</small></span>{p.origTiers && <s className="was" style={{ fontSize: 18 }}>{fmt(priceFor(p.origTiers, qty || p.moq))}</s>}{tiers.length > 1 && <span className="old" style={{ textDecoration: "none" }}>من {fmt(tiers[tiers.length - 1].price)} لـ {fmt(tiers[0].price)} حسب الكمية</span>}</div>
           {tiers.length > 1 ? (
             <div className="card z"><table className="tbl"><tbody>
               <tr><th>الكمية</th><th>سعر ال{p.unit}</th><th>التوفير</th></tr>

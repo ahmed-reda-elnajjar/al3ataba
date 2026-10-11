@@ -11,6 +11,14 @@ export type Product = {
   basePrices?: number[] | null; markup?: number | null; markupTiers?: { min: number; pct: number }[] | null; // original prices before our % markup (one per tier)
   cod: boolean; madeInEgypt: boolean; logoPrint: boolean;
   status: PStatus; keywords: string[]; createdAt?: { seconds: number };
+  /* client-only: set by applyPromos() when a live offer covers this product */
+  origTiers?: Tier[]; promo?: { id: string; title: string; label: string; color: string };
+};
+export type Promo = {
+  id: string; title: string; sub?: string; kind: "percent" | "fixed"; value: number;
+  scope: "all" | "category" | "products"; categoryIds: string[]; productIds: string[];
+  startsAt?: string; endsAt?: string; // YYYY-MM-DD, optional
+  active: boolean; color?: string; image?: string; order?: number; createdAt?: { seconds: number };
 };
 export type Category = { id: string; name: string; icon: string; order: number; image?: string };
 export type Merchant = {
@@ -20,7 +28,7 @@ export type Merchant = {
 };
 export type CartItem = {
   id: string; productId: string; name: string; merchantId: string; merchant: string;
-  qty: number; price: number; image?: string; unit: string; moq: number; fixed?: boolean; tiers?: Tier[]; cod?: boolean;
+  qty: number; price: number; promo?: string; image?: string; unit: string; moq: number; fixed?: boolean; tiers?: Tier[]; cod?: boolean;
 };
 export type Order = {
   id: string; orderNo: string; userId: string; buyerName: string; phone: string;

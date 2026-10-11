@@ -31,7 +31,7 @@ export default function Cart() {
                 <div key={i.id} className="row">
                   <Img src={i.image} ic="ph-package" ratio={1} w={160} style={{ width: 72, borderRadius: 12, flex: "none", background: "#fff", border: "1px solid var(--bd)" }} />
                   <div className="sp col g4">
-                    <b>{i.name}</b>
+                    <b>{i.name}</b>{i.promo && <span className="bd" style={{ background: "#c0392b", color: "#fff", alignSelf: "flex-start" }}><i className="ph-fill ph-tag" />{i.promo}</span>}
                     <small>{fmt(i.price)} ج.م / {i.unit}</small>
                     {i.fixed ? <small>الكمية: {i.qty} {i.unit} (حسب عرض السعر)</small> : (
                       <div className="qty" style={{ alignSelf: "flex-start" }}><button style={{ height: 34, width: 34 }} aria-label="أكثر" onClick={() => change(i.id, i.qty + Math.max(1, Math.round(i.moq / 2)))}><i className="ph ph-plus" /></button><b style={{ minWidth: 44, textAlign: "center" }}>{i.qty}</b><button style={{ height: 34, width: 34 }} aria-label="أقل" onClick={() => change(i.id, i.qty - Math.max(1, Math.round(i.moq / 2)))}><i className="ph ph-minus" /></button></div>

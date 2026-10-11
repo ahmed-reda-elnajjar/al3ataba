@@ -6,18 +6,20 @@ import { authI, dbI } from "./firebase";
 import { ADMIN_EMAILS, DEFAULT_SETTINGS } from "./config";
 import { getSettings } from "./store";
 import { attachUser } from "./reco";
-import type { CartItem, Merchant, Settings } from "./types";
+import type { CartItem, Merchant, Product, Promo, Settings } from "./types";
+import { applyPromos, listPromos } from "./promos";
 
 type Ctx = {
   user: User | null; ready: boolean; loggedIn: boolean; isAdmin: boolean;
   merchant: Merchant | null; settings: Settings;
+  promos: Promo[]; withPromo: (p: Product) => Product;
   items: CartItem[]; count: number;
   add: (i: CartItem) => void; remove: (id: string) => void; setQty: (id: string, q: number) => void; clear: () => void;
   signOut: () => Promise<void>;
 };
 
 const AppCtx = createContext<Ctx>({
-  user: null, ready: false, loggedIn: false, isAdmin: false, merchant: null, settings: DEFAULT_SETTINGS,
+  user: null, ready: false, loggedIn: false, isAdmin: false, merchant: null, settings: DEFAULT_SETTINGS, promos: [], withPromo: (p) => p,
   items: [], count: 0, add() {}, remove() {}, setQty() {}, clear() {}, signOut: async () => {},
 });
 export const useApp = () => useContext(AppCtx);
@@ -35,7 +37,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const cloud = useRef(false);
 
-  useEffect(() => { getSettings().then(setSettings); }, []);
+  const [promos, setPromos] = useState<Promo[]>([]);
+  useEffect(() => { getSettings().then(setSettings); listPromos().then(setPromos); }, []);
+  const withPromo = useCallback((p: Product) => applyPromos(p, promos), [promos]);
 
   useEffect(() => {
     const auth = authI();
@@ -83,13 +87,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const value = useMemo<Ctx>(() => ({
-    user, ready, loggedIn, isAdmin, merchant, settings, items, count: items.length,
+    user, ready, loggedIn, isAdmin, merchant, settings, promos, withPromo, items, count: items.length,
     add: (i) => save(items.some((x) => x.id === i.id) ? items.map((x) => (x.id === i.id ? i : x)) : [...items, i]),
     remove: (id) => save(items.filter((x) => x.id !== id)),
     setQty: (id, q) => save(items.map((x) => (x.id === id ? { ...x, qty: q } : x))),
     clear: () => save([]),
     signOut: async () => { try { localStorage.removeItem(LS); } catch {} await fbSignOut(authI()); },
-  }), [user, ready, loggedIn, isAdmin, merchant, settings, items, save]);
+  }), [user, ready, loggedIn, isAdmin, merchant, settings, promos, withPromo, items, save]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

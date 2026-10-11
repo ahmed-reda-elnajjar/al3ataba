@@ -51,6 +51,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
             <L href="/" ic="ph-house" t="الرئيسية" />
             <L href="/categories" ic="ph-squares-four" t="الأقسام" />
             <L href="/search" ic="ph-package" t="كل المنتجات" />
+            <L href="/offers" ic="ph-tag" t="العروض" />
             <L href="/suppliers" ic="ph-storefront" t="التجار والمصانع" />
             <L href="/rfq" ic="ph-clipboard-text" t="طلب منتج / عرض سعر" />
             <L href="/cart" ic="ph-shopping-cart" t="السلة" />
@@ -66,6 +67,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
                 <L href="/admin/products" ic="ph-package" t="إدارة المنتجات" />
                 <L href="/admin/import" ic="ph-telegram-logo" t="استيراد من تليجرام" />
                 <L href="/admin/categories" ic="ph-list-numbers" t="الأقسام وترتيبها" />
+                <L href="/admin/promos" ic="ph-tag" t="العروض والخصومات" />
                 <L href="/admin/orders" ic="ph-receipt" t="الطلبات" />
                 <L href="/admin/merchants" ic="ph-users-three" t="التجار" />
                 <L href="/admin/settings" ic="ph-gear" t="إعدادات الموقع" />
@@ -110,7 +112,7 @@ export function Header() {
       </div>
       <SearchBox className="srch sm" style={{ marginTop: 10 }} />
       <nav className="hdr-links hm">
-        <Link href="/categories">الأقسام</Link><Link href="/search">كل المنتجات</Link><Link href="/suppliers">التجار والمصانع</Link><Link href="/rfq">طلب عرض سعر</Link><Link href="/help">المساعدة</Link>
+        <Link href="/categories">الأقسام</Link><Link href="/search">كل المنتجات</Link><Link href="/offers">العروض</Link><Link href="/suppliers">التجار والمصانع</Link><Link href="/rfq">طلب عرض سعر</Link><Link href="/help">المساعدة</Link>
       </nav>
     </header>
   );

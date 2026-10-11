@@ -329,3 +329,23 @@ a.card:hover{border-color:var(--gold)}
 .crop-box::before{left:33.3%;right:33.3%;border-top:0;border-bottom:0}.crop-box::after{top:33.3%;bottom:33.3%;border-left:0;border-right:0}
 .crh{position:absolute;width:18px;height:18px;background:var(--gold);border:2px solid #fff;border-radius:50%;touch-action:none}
 .thumbs .t > .cropbtn{top:auto;bottom:30px;inset-inline-start:4px;width:28px;height:28px;display:grid;place-items:center;background:var(--gold)}.thumbs .t > .cropbtn i{font-size:16px;color:#fff}
+
+/* ---------- offers / promos ---------- */
+.pbadge{position:absolute;top:8px;inset-inline-start:8px;z-index:2;background:#c0392b;color:#fff;border-radius:8px;padding:3px 8px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;box-shadow:0 2px 6px #0003}
+.was{color:var(--mu,#8a8a8a);font-size:13px;font-weight:500;margin-inline-start:6px}
+.promo-line{display:flex;align-items:center;gap:8px;background:#c0392b;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px}
+.promo-line i{font-size:18px}
+.promos{display:grid;grid-auto-flow:column;grid-auto-columns:min(88%,420px);gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;margin-bottom:22px;scrollbar-width:none}
+.promos::-webkit-scrollbar{display:none}
+.promo-card{scroll-snap-align:start;position:relative;overflow:hidden;border-radius:18px;min-height:150px;padding:18px;color:#fff;display:flex;flex-direction:column;justify-content:flex-end;gap:4px;background:linear-gradient(135deg,var(--pd),var(--pa))}
+.promo-card img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.promo-card .sh{position:absolute;inset:0;background:linear-gradient(0deg,#000a,#0000 70%)}
+.promo-card>*:not(img):not(.sh){position:relative}
+.promo-card .off{align-self:flex-start;background:var(--gold);color:#fff;border-radius:10px;padding:4px 10px;font:700 15px Alexandria,sans-serif}
+.promo-card h3{font:700 20px Alexandria,sans-serif;color:#fff;margin:0}
+.promo-card small{color:#ffffffd9}
+.promo-card .ends{position:absolute;top:12px;inset-inline-end:12px;background:#0006;border-radius:20px;padding:3px 10px;font-size:12px}
+.pick{max-height:320px;overflow:auto;border:1px solid var(--bd);border-radius:12px}
+.pick label{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--bd);cursor:pointer}
+.pick label img{width:40px;height:40px;object-fit:cover;border-radius:8px;flex:none}
+.pick label:last-child{border-bottom:0}

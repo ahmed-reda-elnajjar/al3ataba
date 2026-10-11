@@ -7,6 +7,7 @@ import { listApprovedMerchants, listCategories, pageActiveProducts } from "@/lib
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { Skyline } from "@/components/Brand";
 import { Recommended } from "@/components/Recommend";
+import { PromoStrip } from "@/components/Promos";
 import { sized } from "@/lib/media";
 
 export default function Home() {
@@ -42,6 +43,8 @@ export default function Home() {
           ))}
         </div>
       )}
+
+      <PromoStrip />
 
       {/* main categories grid */}
       {cats.length > 0 && (

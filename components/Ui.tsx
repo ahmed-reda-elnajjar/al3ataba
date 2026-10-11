@@ -16,11 +16,12 @@ export function Img({ src, ic = "ph-image", ratio = 1, className = "", style, w 
   );
 }
 
-export function ProductCard({ p, verified }: { p: Product; verified?: boolean }) {
-  const { add, items } = useApp();
+export function ProductCard({ p: raw, verified }: { p: Product; verified?: boolean }) {
+  const { add, items, withPromo } = useApp();
+  const p = withPromo(raw);
   const favs = useFavs();
   const inCart = items.some((i) => i.productId === p.id);
-  const quick = () => { track("cart", p); add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: p.moq, price: priceFor(p.tiers, p.moq), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod }); };
+  const quick = () => { track("cart", p); add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: p.moq, price: priceFor(p.tiers, p.moq), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod, ...(p.promo ? { promo: p.promo.label } : {}) }); };
   const fav = favs.has(p.id);
   const coverVideo = p.media?.[0] && isVideoUrl(p.media[0]) ? p.media[0] : "";
   return (
@@ -29,6 +30,7 @@ export function ProductCard({ p, verified }: { p: Product; verified?: boolean })
       <Link href={`/product/${p.id}`} style={{ position: "relative", display: "block" }}>
         <Img src={coverVideo ? videoPoster(coverVideo) : p.images?.[0]} ic="ph-package" ratio={1} w={420} />
         {coverVideo && <span className="vbadge"><i className="ph ph-play" /></span>}
+        {p.promo && <span className="pbadge" style={p.promo.color ? { background: p.promo.color } : undefined}><i className="ph-fill ph-tag" />{p.promo.label}</span>}
       </Link>
       <div className="bodyc">
         <Link href={`/product/${p.id}`} className="nm">{p.name}</Link>
@@ -37,7 +39,7 @@ export function ProductCard({ p, verified }: { p: Product; verified?: boolean })
           <small style={{ fontSize: 12 }}>{(p.packSize ?? 0) > 1 ? `${p.unit} ${p.packSize} قطعة` : `أقل طلب ${p.moq} ${p.unit}`}</small>
         </div>
         <div className="foot">
-          <div className="sp price">{rangeText(p)} <small>ج.م{(p.packSize ?? 0) > 1 ? ` / ${p.unit}` : ""}</small></div>
+          <div className="sp price">{rangeText(p)} <small>ج.م{(p.packSize ?? 0) > 1 ? ` / ${p.unit}` : ""}</small>{p.origTiers && <s className="was">{p.origTiers[0].price}</s>}</div>
           <button className="add" aria-label="أضف للسلة" title={inCart ? "في السلة" : `أضف ${p.moq} ${p.unit} للسلة`} onClick={quick}><i className={`ph ${inCart ? "ph-check" : "ph-plus"}`} /></button>
         </div>
       </div>
