@@ -9,6 +9,7 @@ import { uploadFromUrl } from "@/lib/img";
 import { HOUSE, ICONS } from "@/lib/config";
 import { DEFAULT_RULES, tiersFromRules, type PriceRule } from "@/lib/pricing";
 import { saveRules } from "@/lib/rules";
+import { createSupplier, listSuppliers } from "@/lib/suppliers";
 import { RulesEditor } from "@/components/Markup";
 import type { Category } from "@/lib/types";
 
@@ -44,6 +45,8 @@ export default function ImportSite() {
   const [srcCats, setSrcCats] = useState<SrcCat[]>([]);
   const [map, setMap] = useState<Record<string, string>>({}); // source cat id → our cat id | "new"
   const [owner, setOwner] = useState(HOUSE.id);
+  const sup = useAsync(listSuppliers, []);
+  const [supplier, setSupplier] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
@@ -131,6 +134,8 @@ export default function ImportSite() {
     if (!m) return setErr("اختار التاجر.");
     const missing = srcCatIds.filter((id) => chosen.some((r) => r.cat === id) && !map[id]);
     if (missing.length) return setErr("اختار قسم لكل أقسام الموقع التاني (فوق).");
+    let supplierId = supplier;
+    if (supplier === "__new") { const n = prompt("اسم المورد (للإدارة بس):", "الوزير")?.trim(); if (!n) return; supplierId = (await createSupplier(n)).id; setSupplier(supplierId); sup.reload(); }
     setErr(""); setRunning(true);
     saveRules(rules).catch(() => {});
     // create the new categories first
@@ -164,7 +169,7 @@ export default function ImportSite() {
           tiers, basePrices: [r.base], markup: null, markupTiers: r.edited ? null : tiersFromRules(r.base, rules).rule?.tiers ?? null, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
           cod: true, madeInEgypt: false, logoPrint: false, status: "active",
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
-          merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
+          merchantId: m.id, merchantName: m.name, supplierId: supplierId || null, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
         });
         upd(r.key, { state: "ok", note: "" }); setDone((d) => d + 1);
       } catch { upd(r.key, { state: "err", note: "فشل الحفظ" }); }
@@ -216,6 +221,8 @@ export default function ImportSite() {
             <div className="row wrap">
               <div className="fld" style={{ minWidth: 220 }}><label>تنزل باسم</label>
                 <select className="in" value={owner} onChange={(e) => setOwner(e.target.value)}><option value={HOUSE.id}>العتبة (الإدارة)</option>{merchants.data?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+              <div className="fld" style={{ minWidth: 220 }}><label>المورد (للإدارة بس)</label>
+                <select className="in" value={supplier} onChange={(e) => setSupplier(e.target.value)}><option value="">بدون</option>{sup.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}<option value="__new">+ مورد جديد…</option></select></div>
               <label className="chk"><input type="checkbox" checked={onlyPublished} onChange={(e) => setOnlyPublished(e.target.checked)} />المنشور عندهم بس</label>
             </div>
             <div className="col g8"><b>نسبة الزيادة حسب سعر القطعة والكمية</b><RulesEditor value={rules} onChange={setRules} /></div>

@@ -11,6 +11,7 @@ import { COLORS, swatch } from "@/lib/colors";
 import { useDragSort } from "@/lib/dnd";
 import { tiersFromMarkup, type MarkupTier } from "@/lib/pricing";
 import { MarkupEditor } from "./Markup";
+import { listSuppliers } from "@/lib/suppliers";
 import { sized } from "@/lib/media";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
@@ -64,6 +65,8 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [made, setMade] = useState(p?.madeInEgypt ?? true);
   const [logo, setLogo] = useState(p?.logoPrint ?? false);
   const [status, setStatus] = useState<Product["status"]>(p?.status ?? "active");
+  const [supplierId, setSupplierId] = useState(p?.supplierId ?? "");
+  const sups = useAsync(async () => (isAdmin ? listSuppliers() : []), [isAdmin]);
   const [busy, setBusy] = useState(false);
   const [up, setUp] = useState(false);
   const imgDnd = useDragSort<string>(media, (u) => u, (next) => setMedia(next));
@@ -114,6 +117,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
       media, images: images.length ? images : [videoPoster(videos[0])], videos, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
       specs: specs.filter((s) => s.k.trim() && s.v.trim()), cod, madeInEgypt: made, logoPrint: logo,
       status: isAdmin ? status : (p?.status ?? "active"),
+      ...(isAdmin ? { supplierId: supplierId || null } : {}),
       keywords: Array.from(new Set(`${name} ${cat?.name ?? ""}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
     };
     setBusy(true);
@@ -211,6 +215,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         <label className="chk"><input type="checkbox" checked={made} onChange={(e) => setMade(e.target.checked)} />صناعة مصرية</label>
         <label className="chk"><input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} />طباعة لوجو</label>
       </div>
+      {isAdmin && (sups.data?.length ?? 0) > 0 && <div className="fld" style={{ maxWidth: 240 }}><label>المورد (للإدارة بس)</label><select className="in" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">بدون</option>{sups.data!.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
       {isAdmin && <div className="fld" style={{ maxWidth: 240 }}><label>الحالة</label><select className="in" value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}><option value="active">منشور</option><option value="pending">قيد المراجعة</option><option value="hidden">مخفي</option></select></div>}
       {err && <div className="alert e">{err}</div>}
       <div className="row"><button className="btn" disabled={busy || up} onClick={save}>{up ? (upMsg || "استنى، الملفات بتترفع…") : busy ? "جاري الحفظ…" : "حفظ المنتج"}</button><button className="btn o" type="button" onClick={() => router.push(back)}>إلغاء</button></div>

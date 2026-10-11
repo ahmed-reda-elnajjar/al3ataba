@@ -55,6 +55,11 @@ service cloud.firestore {
     }
 
     // ---- carts ----
+    // internal suppliers list: admins only (customers never see supplier names)
+    match /suppliers/{id} {
+      allow read, write: if isAdmin();
+    }
+
     match /carts/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }

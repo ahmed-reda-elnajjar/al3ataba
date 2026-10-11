@@ -5,7 +5,7 @@ import { dateStr, fmt } from "@/lib/format";
 import type { Order } from "@/lib/types";
 import { Empty, Img, Status } from "./Ui";
 
-type Props = { orders: Order[]; role: "buyer" | "merchant" | "admin"; onStatus?: (o: Order, s: string, tracking?: string) => void };
+type Props = { orders: Order[]; role: "buyer" | "merchant" | "admin"; onStatus?: (o: Order, s: string, tracking?: string) => void; supplierOf?: (productId: string) => string | undefined };
 
 function Tracking({ o, onStatus }: { o: Order; onStatus: NonNullable<Props["onStatus"]> }) {
   const [t, setT] = useState(o.trackingNo || "");
@@ -23,7 +23,7 @@ function Track({ s }: { s: string }) {
   );
 }
 
-export function OrdersList({ orders, role, onStatus }: Props) {
+export function OrdersList({ orders, role, onStatus, supplierOf }: Props) {
   if (!orders.length) return <Empty icon="ph-receipt" title="مفيش طلبات لسه" />;
   return (
     <div className="col">
@@ -38,7 +38,7 @@ export function OrdersList({ orders, role, onStatus }: Props) {
           {o.items.map((i) => (
             <div key={i.id} className="row">
               <Img src={i.image} ic="ph-package" ratio={1} w={120} style={{ width: 48, borderRadius: 8, flex: "none" }} />
-              <div className="sp">{i.name}<br /><small>{i.qty} {i.unit} × {fmt(i.price)} ج.م</small></div>
+              <div className="sp">{i.name}<br /><small>{i.qty} {i.unit} × {fmt(i.price)} ج.م</small>{role === "admin" && supplierOf?.(i.productId) && <> <span className="bd w"><i className="ph ph-truck" />{supplierOf(i.productId)}</span></>}</div>
               <b>{fmt(i.qty * i.price)} ج.م</b>
             </div>
           ))}

@@ -11,6 +11,7 @@ import { Empty, Status } from "@/components/Ui";
 import { DEFAULT_RULES, rangeText, tiersFromRules, type PriceRule } from "@/lib/pricing";
 import { saveRules } from "@/lib/rules";
 import { useApp } from "@/lib/providers";
+import { createSupplier, listSuppliers } from "@/lib/suppliers";
 import { RulesEditor } from "@/components/Markup";
 import type { Product } from "@/lib/types";
 
@@ -25,6 +26,26 @@ export default function AdminProducts() {
   const del = async (p: Product) => { if (confirm(`حذف "${p.name}" نهائيًا؟`)) { await deleteDoc(doc(dbI(), "products", p.id)); reload(); } };
   const [who, setWho] = useState("");
   const { settings } = useApp();
+  const sup = useAsync(listSuppliers, []);
+  const supName = (id?: string | null) => sup.data?.find((s) => s.id === id)?.name;
+  const [sf, setSf] = useState("");           // supplier filter
+  const [sel, setSel] = useState<string[]>([]); // selected product ids
+  const [assignTo, setAssignTo] = useState("");
+  const [amsg, setAmsg] = useState("");
+  const newSupplier = async () => {
+    const n = prompt("اسم المورد (بيظهر للإدارة بس):")?.trim();
+    if (!n) return null;
+    const s = await createSupplier(n); sup.reload(); return s.id;
+  };
+  const assign = async () => {
+    let id = assignTo;
+    if (id === "__new") { const x = await newSupplier(); if (!x) return; id = x; setAssignTo(x); }
+    if (!sel.length) return setAmsg("علّم على المنتجات الأول.");
+    let b = writeBatch(dbI()), k = 0;
+    for (const pid of sel) { b.update(doc(dbI(), "products", pid), { supplierId: id || null }); if (++k % 400 === 0) { await b.commit(); b = writeBatch(dbI()); } }
+    await b.commit();
+    setAmsg(`تم ربط ${sel.length} منتج${id ? ` بالمورد ${supName(id) || ""}` : " (اتشال المورد)"}.`); setSel([]); reload();
+  };
   const [rules, setRules] = useState<PriceRule[]>(settings.markupRules?.length ? settings.markupRules : DEFAULT_RULES);
   const savedRules = JSON.stringify(settings.markupRules ?? null);
   useEffect(() => { if (settings.markupRules?.length) setRules(settings.markupRules); // saved defaults arrive after first render
@@ -34,7 +55,7 @@ export default function AdminProducts() {
   const merchants = Array.from(new Map((data ?? []).map((p) => [p.merchantId, p.merchantName])).entries());
   // Applies the markup on top of each product's ORIGINAL price (saved the first time), so applying it twice never stacks.
   const applyMarkup = async () => {
-    const target = (data ?? []).filter((p) => who === "all" || p.merchantId === who);
+    const target = (data ?? []).filter((p) => who === "all" || (who.startsWith("sup:") ? p.supplierId === who.slice(4) : p.merchantId === who));
     const good = rules.map((r) => ({ ...r, tiers: r.tiers.filter((x) => x.min > 0) })).filter((r) => r.tiers.length);
     if (!who || !good.length || !target.length) return setMmsg("اختار التاجر وحدد الشرايح.");
     if (!confirm(`هتتغيّر أسعار ${target.length} منتج حسب شرايح السعر والكمية، محسوبة على السعر الأصلي. متأكد؟`)) return;
@@ -52,13 +73,32 @@ export default function AdminProducts() {
     await b.commit();
     setMmsg(`تم تحديث ${target.length} منتج.`); reload();
   };
-  const list = (data ?? []).filter((p) => (f === "all" || p.status === f) && (!q || p.name.includes(q)));
+  const list = (data ?? []).filter((p) => (f === "all" || p.status === f) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
   return (
     <>
       <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
       <div className="row wrap">
         {[["all", "الكل"], ["active", "منشور"], ["pending", "قيد المراجعة"], ["hidden", "مخفي"]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => setF(k)}>{t}</button>)}
         <input className="in" style={{ maxWidth: 220 }} placeholder="بحث بالاسم" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="in" style={{ maxWidth: 200 }} value={sf} onChange={(e) => setSf(e.target.value)} aria-label="المورد">
+          <option value="">كل الموردين</option><option value="__none">من غير مورد</option>
+          {sup.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+      <div className="card col" style={{ gap: 10 }}>
+        <b>ربط المنتجات بمورد <small>(اسم المورد بيظهر للإدارة بس، والعميل بيشوف المتجر عادي)</small></b>
+        <div className="row wrap">
+          <button className="btn o sm2" onClick={() => setSel(list.map((p) => p.id))}>علّم المعروض ({list.length})</button>
+          <button className="btn o sm2" onClick={() => setSel([])}>شيل العلامات</button>
+          <span className="sp"><b>{sel.length}</b> متعلّم</span>
+          <select className="in" style={{ maxWidth: 220 }} value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
+            <option value="">بدون مورد</option>
+            {sup.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <option value="__new">+ مورد جديد…</option>
+          </select>
+          <button className="btn" onClick={assign} disabled={!sel.length}>ربط</button>
+        </div>
+        {amsg && <span className="ok">{amsg}</span>}
       </div>
       <details className="card">
         <summary style={{ cursor: "pointer", fontWeight: 700 }}>زيادة / تعديل الأسعار بنسبة %</summary>
@@ -67,7 +107,8 @@ export default function AdminProducts() {
           <div className="row wrap">
             <select className="in" style={{ maxWidth: 260 }} value={who} onChange={(e) => setWho(e.target.value)}>
               <option value="">اختار التاجر…</option><option value="all">كل المنتجات</option>
-              {merchants.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+              <optgroup label="المتجر الظاهر للعميل">{merchants.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</optgroup>
+              {(sup.data?.length ?? 0) > 0 && <optgroup label="المورد (للإدارة بس)">{sup.data!.map((s) => <option key={s.id} value={`sup:${s.id}`}>مورد: {s.name}</option>)}</optgroup>}
             </select>
           </div>
           <RulesEditor value={rules} onChange={setRules} />
@@ -78,9 +119,11 @@ export default function AdminProducts() {
       {loading ? <div className="skel" /> : !list.length ? <Empty icon="ph-package" title="مفيش منتجات" sub="ابدأ بإضافة أول منتج." /> : (
         <div className="col">
           {list.map((p) => (
-            <div key={p.id} className="card row wrap">
+            <div key={p.id} className="card row wrap" style={sel.includes(p.id) ? { borderColor: "var(--pa)", background: "#f3f8f5" } : undefined}>
+              <input type="checkbox" checked={sel.includes(p.id)} onChange={(e) => setSel(e.target.checked ? [...sel, p.id] : sel.filter((x) => x !== p.id))} style={{ width: 20, height: 20, accentColor: "var(--pa)" }} aria-label="اختيار" />
               {p.images?.[0] ? <img className="ph-thumb" src={sized(p.images[0], 120)} alt="" loading="lazy" /> : <div className="ph-thumb" />}
               <div className="sp" style={{ minWidth: 160 }}><b>{p.name}</b><br /><small>{p.merchantName} · {p.categoryName} · {rangeText(p)} ج.م{p.markupTiers?.length ? ` (${p.markupTiers.map((x) => `${x.min}+: ${x.pct}%`).join(" / ")})` : p.markup ? ` (+${p.markup}%)` : ""}</small></div>
+              {supName(p.supplierId) && <span className="bd w"><i className="ph ph-truck" />{supName(p.supplierId)}</span>}
               <Status s={p.status} />
               <Link className="btn o sm2" href={`/admin/products/${p.id}`}>تعديل</Link>
               {p.status !== "active" ? <button className="btn sm2" onClick={() => set(p, "active")}>نشر</button> : <button className="btn o sm2" onClick={() => set(p, "hidden")}>إخفاء</button>}
