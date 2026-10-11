@@ -22,7 +22,16 @@ export default function AdminProducts() {
   }, []);
   const [f, setF] = useState("all");
   const [q, setQ] = useState("");
-  const set = async (p: Product, status: string) => { await updateDoc(doc(dbI(), "products", p.id), { status }); reload(); };
+  const set = async (p: Product, status: string) => { await updateDoc(doc(dbI(), "products", p.id), { status, ...(status === "active" && p.status === "pending" ? { reviewed: true } : {}) }); reload(); };
+  // "تم المراجعة" — toggled locally so the list doesn't reload for every click
+  const [revOver, setRevOver] = useState<Record<string, boolean>>({});
+  const isRev = (p: Product) => revOver[p.id] ?? !!p.reviewed;
+  const toggleRev = async (p: Product) => {
+    const v = !isRev(p);
+    setRevOver((o) => ({ ...o, [p.id]: v }));
+    try { await updateDoc(doc(dbI(), "products", p.id), { reviewed: v }); } catch { setRevOver((o) => ({ ...o, [p.id]: !v })); alert("مقدرتش أحفظ — جرّب تاني"); }
+  };
+  const [rf, setRf] = useState(""); // "" | "todo" | "done"
   const del = async (p: Product) => { if (confirm(`حذف "${p.name}" نهائيًا؟`)) { await deleteDoc(doc(dbI(), "products", p.id)); reload(); } };
   const [who, setWho] = useState("");
   const { settings } = useApp();
@@ -81,14 +90,15 @@ export default function AdminProducts() {
     if (action === "delete" && !confirm(`حذف ${ids.length} منتج نهائياً؟`)) return;
     let b = writeBatch(dbI()), k = 0;
     for (const pid of ids) {
-      if (action === "delete") b.delete(doc(dbI(), "products", pid)); else b.update(doc(dbI(), "products", pid), { status: action });
+      if (action === "delete") b.delete(doc(dbI(), "products", pid)); else b.update(doc(dbI(), "products", pid), { status: action, ...(action === "active" ? { reviewed: true } : {}) });
       if (++k % 400 === 0) { await b.commit(); b = writeBatch(dbI()); }
     }
     await b.commit();
     setRmsg(action === "active" ? `اتنشر ${ids.length} منتج ✓` : action === "hidden" ? `اتخفى ${ids.length} منتج` : `اتحذف ${ids.length} منتج`);
     setSel([]); reload();
   };
-  const list = (data ?? []).filter((p) => (f === "all" || p.status === f) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
+  const revDone = (data ?? []).filter(isRev).length;
+  const list = (data ?? []).filter((p) => (f === "all" || p.status === f) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
   return (
     <>
       <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
@@ -115,6 +125,9 @@ export default function AdminProducts() {
       )}
       <div className="row wrap">
         {[["all", "الكل"], ["active", "منشور"], ["pending", `مراجعة${pendingN ? ` (${pendingN})` : ""}`], ["hidden", "مخفي"]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => { setF(k); setSel([]); }}>{t}</button>)}
+        <span style={{ width: 1, alignSelf: "stretch", background: "var(--bd)" }} />
+        <button className={`chip ${rf === "todo" ? "on" : ""}`} onClick={() => setRf(rf === "todo" ? "" : "todo")}><i className="ph ph-circle-dashed" />لسه ماتراجعش ({(data?.length ?? 0) - revDone})</button>
+        <button className={`chip ${rf === "done" ? "on" : ""}`} onClick={() => setRf(rf === "done" ? "" : "done")}><i className="ph ph-check-circle" />تم مراجعته ({revDone})</button>
         <input className="in" style={{ maxWidth: 220 }} placeholder="بحث بالاسم" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="in" style={{ maxWidth: 200 }} value={sf} onChange={(e) => setSf(e.target.value)} aria-label="المورد">
           <option value="">كل الموردين</option><option value="__none">من غير مورد</option>
@@ -155,13 +168,14 @@ export default function AdminProducts() {
       {loading ? <div className="skel" /> : !list.length ? <Empty icon="ph-package" title="مفيش منتجات" sub="ابدأ بإضافة أول منتج." /> : (
         <div className="col">
           {list.map((p) => (
-            <div key={p.id} className="card row wrap" style={sel.includes(p.id) ? { borderColor: "var(--pa)", background: "#f3f8f5" } : undefined}>
+            <div key={p.id} className="card row wrap" style={sel.includes(p.id) ? { borderColor: "var(--pa)", background: "#f3f8f5" } : isRev(p) ? { borderInlineStart: "4px solid var(--pa)" } : undefined}>
               <input type="checkbox" checked={sel.includes(p.id)} onChange={(e) => setSel(e.target.checked ? [...sel, p.id] : sel.filter((x) => x !== p.id))} style={{ width: 20, height: 20, accentColor: "var(--pa)" }} aria-label="اختيار" />
               {p.images?.[0] ? <img className="ph-thumb" src={sized(p.images[0], 120)} alt="" loading="lazy" /> : <div className="ph-thumb" />}
               <div className="sp" style={{ minWidth: 160 }}><b>{p.name}</b><br /><small>{p.merchantName} · {p.categoryName} · {rangeText(p)} ج.م{p.markupTiers?.length ? ` (${p.markupTiers.map((x) => `${x.min}+: ${x.pct}%`).join(" / ")})` : p.markup ? ` (+${p.markup}%)` : ""}</small></div>
               {supName(p.supplierId) && <span className="bd w"><i className="ph ph-truck" />{supName(p.supplierId)}</span>}
               <Status s={p.status} />
               <Link className="btn o sm2" href={`/admin/products/${p.id}`}>تعديل</Link>
+              <button className={`btn sm2 ${isRev(p) ? "" : "o"}`} onClick={() => toggleRev(p)} title={isRev(p) ? "اضغط لإلغاء المراجعة" : "علّم إنك راجعت كل تفاصيل المنتج"}><i className={`ph${isRev(p) ? "-fill" : ""} ph-check-circle`} />{isRev(p) ? "تمت المراجعة" : "تم المراجعة"}</button>
               {p.status !== "active" ? <button className="btn sm2" onClick={() => set(p, "active")}>{p.status === "pending" ? "موافقة ونشر" : "نشر"}</button> : <button className="btn o sm2" onClick={() => set(p, "hidden")}>إخفاء</button>}
               <button className="btn r sm2" onClick={() => del(p)}>حذف</button>
             </div>

@@ -11,6 +11,7 @@ export type Product = {
   basePrices?: number[] | null; markup?: number | null; markupTiers?: { min: number; pct: number }[] | null; // original prices before our % markup (one per tier)
   cod: boolean; madeInEgypt: boolean; logoPrint: boolean;
   status: PStatus; keywords: string[]; createdAt?: { seconds: number };
+  reviewed?: boolean; // admin checked every detail ("تم المراجعة")
   /* client-only: set by applyPromos() when a live offer covers this product */
   origTiers?: Tier[]; promo?: { id: string; title: string; label: string; color: string; min?: number; tiers?: Tier[] };
 };
