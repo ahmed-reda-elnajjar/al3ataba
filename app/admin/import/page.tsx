@@ -130,7 +130,7 @@ export default function ImportTelegram() {
         await addDoc(collection(dbI(), "products"), {
           name, description: r.text.trim(), categoryId: c.id, categoryName: c.name, unit, moq: q,
           tiers: [{ min: q, price }], governorate: m.governorate || "القاهرة", images, colors: [], specs: [],
-          cod: true, madeInEgypt: false, logoPrint: false, status: "active",
+          cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "telegram", sourceId: r.key, createdAt: serverTimestamp(),
         });
@@ -166,7 +166,8 @@ export default function ImportTelegram() {
             <div className="fld"><label>أقل كمية (لو مش مكتوبة)</label><input className="in" inputMode="numeric" value={moq} onChange={(e) => setMoq(e.target.value.replace(/\D/g, ""))} /></div>
           </div>
           <div className="row wrap">
-            <b className="sp">{rows.length} منتج اتلقى · {chosen.length} متعلّم · {done} اتضاف</b>
+            <b className="sp">{rows.length} منتج اتلقى · {chosen.length} متعلّم · {done} اتضاف للمراجعة</b>
+              {done > 0 && !running && <a className="btn gd sm2" href="/admin/products?f=pending"><i className="ph ph-eye" />راجعهم وانشرهم</a>}
             <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => ({ ...r, on: true })))}>علّم الكل</button>
             <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => ({ ...r, on: false })))}>شيل الكل</button>
             <button className="btn" disabled={running || !chosen.length} onClick={run}>{running ? `جاري الإضافة… ${done}` : `إضافة ${chosen.length} منتج`}</button>

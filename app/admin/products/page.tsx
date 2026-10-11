@@ -73,12 +73,48 @@ export default function AdminProducts() {
     await b.commit();
     setMmsg(`تم تحديث ${target.length} منتج.`); reload();
   };
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("f") === "pending") setF("pending"); }, []);
+  const pendingN = (data ?? []).filter((p) => p.status === "pending").length;
+  const [rmsg, setRmsg] = useState("");
+  const bulk = async (ids: string[], action: "active" | "hidden" | "delete") => {
+    if (!ids.length) return setRmsg("علّم على المنتجات الأول.");
+    if (action === "delete" && !confirm(`حذف ${ids.length} منتج نهائياً؟`)) return;
+    let b = writeBatch(dbI()), k = 0;
+    for (const pid of ids) {
+      if (action === "delete") b.delete(doc(dbI(), "products", pid)); else b.update(doc(dbI(), "products", pid), { status: action });
+      if (++k % 400 === 0) { await b.commit(); b = writeBatch(dbI()); }
+    }
+    await b.commit();
+    setRmsg(action === "active" ? `اتنشر ${ids.length} منتج ✓` : action === "hidden" ? `اتخفى ${ids.length} منتج` : `اتحذف ${ids.length} منتج`);
+    setSel([]); reload();
+  };
   const list = (data ?? []).filter((p) => (f === "all" || p.status === f) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
   return (
     <>
       <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
+      {pendingN > 0 && f !== "pending" && (
+        <div className="alert row wrap" style={{ borderColor: "var(--gold)" }}>
+          <i className="ph ph-hourglass" style={{ color: "var(--gold)", fontSize: 22 }} />
+          <span className="sp">فيه <b>{pendingN}</b> منتج مستني المراجعة قبل ما يظهر للعملاء (من الاستيراد).</span>
+          <button className="btn gd sm2" onClick={() => { setF("pending"); setSel([]); }}><i className="ph ph-eye" />مراجعة</button>
+        </div>
+      )}
+      {f === "pending" && (
+        <div className="card col" style={{ gap: 10, borderColor: "var(--gold)" }}>
+          <b><i className="ph ph-eye" style={{ color: "var(--gold)" }} /> مراجعة المنتجات قبل النشر</b>
+          <small>المنتجات دي مش ظاهرة للعملاء. افتح أي منتج بـ "تعديل" علشان تراجع الاسم والسعر والصور، وبعدين انشره. أو علّم على كذا منتج وانشرهم مرة واحدة.</small>
+          <div className="row wrap">
+            <button className="btn o sm2" onClick={() => setSel(list.map((p) => p.id))}>علّم الكل ({list.length})</button>
+            <button className="btn o sm2" onClick={() => setSel([])}>شيل العلامات</button>
+            <span className="sp"><b>{sel.length}</b> متعلّم</span>
+            <button className="btn sm2" disabled={!sel.length} onClick={() => bulk(sel, "active")}><i className="ph ph-check" />نشر المتعلّم</button>
+            <button className="btn r sm2" disabled={!sel.length} onClick={() => bulk(sel, "delete")}><i className="ph ph-trash" />حذف المتعلّم</button>
+          </div>
+          {rmsg && <span className="ok">{rmsg}</span>}
+        </div>
+      )}
       <div className="row wrap">
-        {[["all", "الكل"], ["active", "منشور"], ["pending", "قيد المراجعة"], ["hidden", "مخفي"]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => setF(k)}>{t}</button>)}
+        {[["all", "الكل"], ["active", "منشور"], ["pending", `مراجعة${pendingN ? ` (${pendingN})` : ""}`], ["hidden", "مخفي"]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => { setF(k); setSel([]); }}>{t}</button>)}
         <input className="in" style={{ maxWidth: 220 }} placeholder="بحث بالاسم" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="in" style={{ maxWidth: 200 }} value={sf} onChange={(e) => setSf(e.target.value)} aria-label="المورد">
           <option value="">كل الموردين</option><option value="__none">من غير مورد</option>
@@ -126,7 +162,7 @@ export default function AdminProducts() {
               {supName(p.supplierId) && <span className="bd w"><i className="ph ph-truck" />{supName(p.supplierId)}</span>}
               <Status s={p.status} />
               <Link className="btn o sm2" href={`/admin/products/${p.id}`}>تعديل</Link>
-              {p.status !== "active" ? <button className="btn sm2" onClick={() => set(p, "active")}>نشر</button> : <button className="btn o sm2" onClick={() => set(p, "hidden")}>إخفاء</button>}
+              {p.status !== "active" ? <button className="btn sm2" onClick={() => set(p, "active")}>{p.status === "pending" ? "موافقة ونشر" : "نشر"}</button> : <button className="btn o sm2" onClick={() => set(p, "hidden")}>إخفاء</button>}
               <button className="btn r sm2" onClick={() => del(p)}>حذف</button>
             </div>
           ))}

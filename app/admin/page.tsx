@@ -8,7 +8,7 @@ import type { Order } from "@/lib/types";
 
 const MENU = [
   { href: "/admin/merchants", t: "إدارة التجار", ic: "ph-users-three", k: "pendingMerchants" },
-  { href: "/admin/products", t: "إدارة المنتجات", ic: "ph-package", k: "pendingProducts" },
+  { href: "/admin/products?f=pending", t: "إدارة المنتجات ومراجعة المستورد", ic: "ph-package", k: "pendingProducts" },
   { href: "/admin/orders", t: "الطلبات", ic: "ph-receipt", k: "newOrders" },
   { href: "/admin/categories", t: "الأقسام وترتيبها", ic: "ph-list-numbers", k: "" },
   { href: "/admin/promos", t: "العروض والخصومات على الأقسام والمنتجات", ic: "ph-tag", k: "" },

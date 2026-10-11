@@ -58,7 +58,7 @@ export function Loading({ rows = 4 }: { rows?: number }) {
 
 export function Status({ s }: { s: string }) {
   const m: Record<string, [string, string]> = {
-    active: ["منشور", "v"], pending: ["قيد المراجعة", "w"], hidden: ["مخفي", "g"],
+    active: ["منشور", "v"], pending: ["مستني المراجعة", "w"], hidden: ["مخفي", "g"],
     approved: ["مقبول", "v"], rejected: ["مرفوض", "e"], open: ["مفتوح", "v"], closed: ["مغلق", "g"],
     new: ["جديد", "w"], confirmed: ["مؤكد", ""], shipped: ["تم الشحن", ""], delivered: ["تم التسليم", "v"], cancelled: ["ملغي", "e"], accepted: ["مقبول", "v"],
   };

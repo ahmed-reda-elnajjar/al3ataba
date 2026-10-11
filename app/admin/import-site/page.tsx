@@ -209,7 +209,7 @@ export default function ImportSite() {
         await addDoc(collection(dbI(), "products"), {
           name, description: strip(p.details), categoryId: c.id, categoryName: c.name, unit: packOf(r) > 1 ? "شريحة" : p.unit === "pc" || !p.unit ? "قطعة" : p.unit, moq: q,
           tiers, basePrices: [unitBase(r)], markup: null, markupTiers: r.edited ? null : tiersFromRules(unitBase(r), rules).rule?.tiers ?? null, packSize: packOf(r) > 1 ? packOf(r) : null, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
-          cod: true, madeInEgypt: false, logoPrint: false, status: "active",
+          cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, supplierId: supplierId || null, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
         });
@@ -282,7 +282,8 @@ export default function ImportSite() {
             </div>
             <div className="col g8"><b>نسبة الزيادة حسب سعر القطعة والكمية</b><RulesEditor value={rules} onChange={setRules} /></div>
             <div className="row wrap">
-              <b className="sp">{visible.length} منتج · {chosen.length} متعلّم · {done} اتضاف</b>
+              <b className="sp">{visible.length} منتج · {chosen.length} متعلّم · {done} اتضاف للمراجعة</b>
+              {done > 0 && !running && <a className="btn gd sm2" href="/admin/products?f=pending"><i className="ph ph-eye" />راجعهم وانشرهم</a>}
               <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => (r.state === "ok" ? r : { ...r, on: true })))}>علّم الكل</button>
               <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => ({ ...r, on: false })))}>شيل الكل</button>
               <button className="btn" disabled={running || !chosen.length} onClick={run}>{running ? `جاري الإضافة… ${done}` : `إضافة ${chosen.length} منتج`}</button>
