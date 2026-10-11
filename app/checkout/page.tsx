@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAddr } from "@/lib/addr";
 import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { st } from "@/lib/style";
@@ -17,6 +18,8 @@ function Form() {
   const [ship, setShip] = useState("ship");
   const [pay, setPay] = useState("cod");
   const [f, setF] = useState({ name: user?.displayName || "", phone: user?.phoneNumber || "", governorate: "", city: "", street: "", landmark: "", note: "" });
+  const { addr } = useAddr();
+  useEffect(() => { if (addr) setF((o) => ({ ...o, governorate: o.governorate || addr.governorate, city: o.city || addr.city })); }, [addr]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });

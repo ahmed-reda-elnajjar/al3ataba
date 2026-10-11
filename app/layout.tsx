@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Announcement, Header, Footer, BottomNav, WhatsApp, Welcome } from "@/components/Shell";
 import { Providers } from "@/lib/providers";
+import { Splash } from "@/components/Splash";
 
 export const metadata: Metadata = {
   title: "العتبة أونلاين | من كل أسواق مصر في مكان واحد",
@@ -11,14 +12,17 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" />
         <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
         <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css" />
         <meta name="theme-color" content="#0a3427" />
+        {/* skip the intro instantly (before first paint) if it was already shown in this visit */}
+        <script dangerouslySetInnerHTML={{ __html: "try{if(sessionStorage.getItem('al3ataba-splash'))document.documentElement.classList.add('no-splash')}catch(e){}" }} />
       </head>
       <body>
+        <Splash />
         <Providers>
           <div className="frame">
             <Announcement />

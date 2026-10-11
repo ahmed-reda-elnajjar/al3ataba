@@ -16,9 +16,9 @@ export function Mark({ size = 40, light = false }: { size?: number; light?: bool
   );
 }
 
-export function Logo({ light = false, size = 38, href = "/", onClick }: { light?: boolean; size?: number; href?: string; onClick?: () => void }) {
+export function Logo({ light = false, size = 38, href = "/", onClick, className = "" }: { light?: boolean; size?: number; href?: string; onClick?: () => void; className?: string }) {
   return (
-    <Link href={href} className={`logo${light ? " light" : ""}`} onClick={onClick} aria-label="العتبة أونلاين">
+    <Link href={href} className={`logo${light ? " light" : ""}${className ? " " + className : ""}`} onClick={onClick} aria-label="العتبة أونلاين">
       <Mark size={size} light={light} />
       <span className="lt"><b>العتبة أونلاين</b><small>ATABA ONLINE</small></span>
     </Link>

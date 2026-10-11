@@ -9,6 +9,8 @@ import { listCategories } from "@/lib/store";
 import { Logo, LogoBig, MarketArt, Skyline } from "./Brand";
 import { SearchBox } from "./SearchBox";
 import { sized } from "@/lib/media";
+import { useAddr } from "@/lib/addr";
+import { GOVERNORATES } from "@/lib/config";
 
 export function Announcement() {
   const { settings } = useApp();
@@ -88,9 +90,37 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
+/* Thin "deliver to" line under the mobile search; asks for the area when we don't have it. */
+function AddrLine() {
+  const { addr, save } = useAddr();
+  const [open, setOpen] = useState(false);
+  const [g, setG] = useState("");
+  const [c, setC] = useState("");
+  const start = () => { setG(addr?.governorate || ""); setC(addr?.city || ""); setOpen(true); };
+  return (
+    <>
+      <button className="addr-line sm" onClick={start}>
+        <i className="ph ph-map-pin" />
+        {addr ? <span>التوصيل إلى: <b>{addr.governorate}{addr.city ? `، ${addr.city}` : ""}</b></span> : <span>حدد عنوان التوصيل علشان نعرض لك الشحن الصح</span>}
+        <i className="ph ph-caret-down" style={{ marginInlineStart: "auto" }} />
+      </button>
+      {open && (
+        <div className="addr-modal" role="dialog" aria-label="عنوان التوصيل" onClick={() => setOpen(false)}>
+          <div className="addr-box col" onClick={(e) => e.stopPropagation()}>
+            <div className="row"><b className="sp" style={{ fontSize: 17 }}>عنوان التوصيل</b><button className="dr-x" onClick={() => setOpen(false)} aria-label="إغلاق"><i className="ph ph-x" /></button></div>
+            <div className="fld"><label>المحافظة</label><select className="in" value={g} onChange={(e) => setG(e.target.value)}><option value="">اختار</option>{GOVERNORATES.map((x) => <option key={x}>{x}</option>)}</select></div>
+            <div className="fld"><label>المدينة / المنطقة</label><input className="in" value={c} onChange={(e) => setC(e.target.value)} placeholder="مثال: مدينة نصر" /></div>
+            <button className="btn blk" disabled={!g} onClick={() => { save({ governorate: g, city: c.trim() }); setOpen(false); }}>حفظ</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function Header() {
   const path = usePathname();
-  const { count, loggedIn, isAdmin, merchant, settings } = useApp();
+  const { count, loggedIn, isAdmin, merchant } = useApp();
   const [menu, setMenu] = useState(false);
   const panel = isAdmin ? { href: "/admin", t: "الإدارة", ic: "ph-gear" } : merchant?.status === "approved" ? { href: "/merchant", t: "متجري", ic: "ph-storefront" } : null;
   const bare = BARE.some((b) => path.startsWith(b));
@@ -99,10 +129,11 @@ export function Header() {
       <Drawer open={menu} onClose={() => setMenu(false)} />
       <div className="in-row">
         <button className="burger" onClick={() => setMenu(true)} aria-label="القائمة"><i className="ph ph-list" /></button>
-        <Logo light size={36} />
+        <Logo light size={36} className="hlogo" />
         <SearchBox className="srch hm" style={{ maxWidth: 620 }} />
         <span className="sp" />
-        <span className="loc sm"><i className="ph ph-map-pin" />{settings.city || "القاهرة"}</span>
+        <Link href={loggedIn ? "/account" : "/login"} className="hico sm" aria-label={loggedIn ? "حسابي" : "تسجيل الدخول"}><i className={`ph${loggedIn ? "-fill" : ""} ph-user-circle`} /></Link>
+        <Link href="/cart" className="hico sm" aria-label="السلة"><i className="ph ph-shopping-cart-simple" />{count > 0 && <span className="cnt">{count}</span>}</Link>
         <nav className="nav hm">
           {panel ? <Link href={panel.href} className="nl"><i className={`ph ${panel.ic}`} />{panel.t}</Link> : <Link href="/sell" className="nl"><i className="ph ph-storefront" />بيع معانا</Link>}
           <Link href="/rfq" className="nl"><i className="ph ph-clipboard-text" />طلب منتج</Link>
@@ -111,6 +142,7 @@ export function Header() {
         </nav>
       </div>
       <SearchBox className="srch sm" style={{ marginTop: 10 }} />
+      {!bare && <AddrLine />}
       <nav className="hdr-links hm">
         <Link href="/categories">الأقسام</Link><Link href="/search">كل المنتجات</Link><Link href="/offers">العروض</Link><Link href="/suppliers">التجار والمصانع</Link><Link href="/rfq">طلب عرض سعر</Link><Link href="/help">المساعدة</Link>
       </nav>

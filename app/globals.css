@@ -367,3 +367,56 @@ a.card:hover{border-color:var(--gold)}
 .hs-dots{position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;gap:6px;z-index:2}
 .hs-dots button{all:unset;cursor:pointer;width:8px;height:8px;border-radius:8px;background:#fff8;transition:width .3s}
 .hs-dots button.on{width:22px;background:var(--gold2)}
+
+/* ---------- mobile header: icons + delivery line ---------- */
+.hico{position:relative;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;color:#fff;flex:none}
+.hico i{font-size:27px}.hico:active{background:#ffffff1a}
+.hico .cnt{top:0;inset-inline-end:-2px}
+@media(max-width:899px){
+ .hlogo svg{width:28px;height:28px}
+ .hlogo b{font-size:16px}
+ .hlogo small{font-size:6.5px;letter-spacing:.28em}
+}
+.addr-line{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;font-weight:300;color:var(--goldl);width:100%;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.addr-line span{overflow:hidden;text-overflow:ellipsis}
+.addr-line b{font-weight:600;color:#fff}
+.addr-line i{color:var(--gold2);font-size:15px;flex:none}
+.addr-modal{position:fixed;inset:0;background:#0008;z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.addr-box{background:#fff;color:var(--tx);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:18px 16px 24px;gap:14px}
+@media(min-width:600px){.addr-modal{align-items:center}.addr-box{border-radius:20px}}
+
+/* ---------- intro splash ---------- */
+.splash{position:fixed;inset:0;z-index:1000;background:radial-gradient(120% 80% at 50% 35%,#145c46 0%,#0a3427 60%,#062319 100%);color:#fff;display:flex;flex-direction:column;overflow:hidden;transition:opacity .45s ease,transform .45s ease}
+.splash.out{opacity:0;transform:scale(1.04);pointer-events:none}
+.no-splash .splash{display:none}
+.sp-skip{all:unset;cursor:pointer;position:absolute;top:max(16px,env(safe-area-inset-top));inset-inline-start:16px;z-index:3;font-size:14px;color:#f1e6d1;padding:6px 14px;border:1px solid #ffffff33;border-radius:20px;background:#ffffff10}
+.sp-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:0 24px;text-align:center;margin-top:-8vh}
+.sp-mark{position:relative;display:grid;place-items:center;animation:spPop .8s cubic-bezier(.2,.9,.3,1.35) both}
+.sp-ring{position:absolute;width:150px;height:150px;border-radius:50%;border:2px solid #c9a66b;opacity:0;animation:spRing 1.4s .35s ease-out both}
+.sp-title{font:700 32px Alexandria,sans-serif;margin-top:10px;animation:spUp .5s .45s both}
+.sp-en{letter-spacing:.45em;color:#c9a66b;font-size:11px;font-weight:600;animation:spUp .5s .55s both}
+.sp-tag{color:#f1e6d1;font-size:15px;margin-top:8px;animation:spUp .5s .8s both}
+.sp-pills{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:14px}
+.sp-pills span{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:5px 11px;border-radius:20px;background:#ffffff14;border:1px solid #ffffff22;animation:spUp .45s both}
+.sp-pills span i{color:#c9a66b;font-size:15px}
+.sp-pills span:nth-child(1){animation-delay:1.05s}.sp-pills span:nth-child(2){animation-delay:1.2s}.sp-pills span:nth-child(3){animation-delay:1.35s}
+.sp-street{position:relative;height:190px;flex:none}
+.sp-sky{position:absolute;bottom:0;left:0;width:100%;height:150px;color:#c9a66b;opacity:.55}
+.sp-sky path{stroke-dasharray:900;stroke-dashoffset:900;animation:spDraw 1.8s .15s ease-out forwards}
+.sp-crowd{position:absolute;inset:auto 0 2px 0;height:80px}
+.sp-p{position:absolute;bottom:0;transform-origin:bottom center;animation-name:spWalk;animation-timing-function:linear;animation-iteration-count:infinite}
+.sp-p svg{display:block;transform:scale(calc(var(--s) * 1.4));transform-origin:bottom center;animation:spBob .5s ease-in-out infinite alternate}
+.sp-p.rev{animation-name:spWalkR}.sp-p.rev svg{transform:scale(calc(var(--s) * -1.4),calc(var(--s) * 1.4))}
+.sp-p .l1{animation:spLeg .5s ease-in-out infinite alternate;transform-origin:10px 32px}
+.sp-p .l2{animation:spLeg .5s ease-in-out infinite alternate-reverse;transform-origin:14px 32px}
+.sp-bar{position:absolute;bottom:0;left:0;height:3px;width:100%;background:#c9a66b;transform-origin:right;animation:spBar linear both}
+@keyframes spPop{from{opacity:0;transform:scale(.3) translateY(20px)}to{opacity:1;transform:none}}
+@keyframes spRing{0%{opacity:.9;transform:scale(.5)}100%{opacity:0;transform:scale(1.6)}}
+@keyframes spUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes spDraw{to{stroke-dashoffset:0}}
+@keyframes spWalk{0%{transform:translateX(0);opacity:0}12%,88%{opacity:1}100%{transform:translateX(-45vw);opacity:0}}
+@keyframes spWalkR{0%{transform:translateX(0);opacity:0}12%,88%{opacity:1}100%{transform:translateX(45vw);opacity:0}}
+@keyframes spBob{from{translate:0 0}to{translate:0 -2px}}
+@keyframes spLeg{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
+@keyframes spBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media(prefers-reduced-motion:reduce){.splash *{animation-duration:.01s!important;animation-iteration-count:1!important}}
