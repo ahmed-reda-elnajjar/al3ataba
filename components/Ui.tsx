@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import type { Product } from "@/lib/types";
-import { priceFor, rangeText } from "@/lib/pricing";
+import { priceFor, rangeText, snapQty } from "@/lib/pricing";
 import { useApp } from "@/lib/providers";
 import { useFavs } from "@/lib/favs";
 import { isVideoUrl, videoPoster } from "@/lib/img";
 import { sized } from "@/lib/media";
 import { track } from "@/lib/reco";
+import { cartPromoFields } from "@/lib/promos";
 
 export function Img({ src, ic = "ph-image", ratio = 1, className = "", style, w = 600 }: { src?: string; ic?: string; ratio?: number; className?: string; style?: React.CSSProperties; w?: number }) {
   return (
@@ -16,12 +17,12 @@ export function Img({ src, ic = "ph-image", ratio = 1, className = "", style, w 
   );
 }
 
-export function ProductCard({ p: raw, verified }: { p: Product; verified?: boolean }) {
+export function ProductCard({ p: raw, verified, showPromo = false }: { p: Product; verified?: boolean; showPromo?: boolean }) {
   const { add, items, withPromo } = useApp();
   const p = withPromo(raw);
   const favs = useFavs();
   const inCart = items.some((i) => i.productId === p.id);
-  const quick = () => { track("cart", p); add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: p.moq, price: priceFor(p.tiers, p.moq), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod, ...(p.promo ? { promo: p.promo.label } : {}) }); };
+  const quick = () => { track("cart", p); const q0 = snapQty(p.tiers, p.moq, p.moq); add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: q0, price: priceFor(p.tiers, q0), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod, ...cartPromoFields(p) }); };
   const fav = favs.has(p.id);
   const coverVideo = p.media?.[0] && isVideoUrl(p.media[0]) ? p.media[0] : "";
   return (
@@ -30,7 +31,7 @@ export function ProductCard({ p: raw, verified }: { p: Product; verified?: boole
       <Link href={`/product/${p.id}`} style={{ position: "relative", display: "block" }}>
         <Img src={coverVideo ? videoPoster(coverVideo) : p.images?.[0]} ic="ph-package" ratio={1} w={420} />
         {coverVideo && <span className="vbadge"><i className="ph ph-play" /></span>}
-        {p.promo && <span className="pbadge" style={p.promo.color ? { background: p.promo.color } : undefined}><i className="ph-fill ph-tag" />{p.promo.label}</span>}
+        {showPromo && p.promo && <span className="pbadge" style={p.promo.color ? { background: p.promo.color } : undefined}><i className="ph-fill ph-tag" />{p.promo.label}</span>}
       </Link>
       <div className="bodyc">
         <Link href={`/product/${p.id}`} className="nm">{p.name}</Link>

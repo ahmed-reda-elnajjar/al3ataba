@@ -38,3 +38,26 @@ export const rangeText = (p: Product) => {
   const [a, b] = priceRange(p);
   return a === b ? `${a}` : `${a} – ${b}`;
 };
+
+/* ---------- wholesale quantity steps ----------
+ * Once a quantity reaches a wholesale tier it moves in multiples of that tier's minimum:
+ * tiers 1 / 5 → 1,2,3,4,5,10,15,20…   tiers 12 / 50 → 12,24,36,48,50,100…  */
+const tierAt = (tiers: Tier[], q: number) => { const s = sortTiers(tiers); let t = s[0]; for (const x of s) if (q >= x.min) t = x; return t; };
+export function validQty(tiers: Tier[] | undefined, q: number, moq = 1): boolean {
+  if (q < Math.max(1, moq)) return false;
+  const t = tiers?.length ? tierAt(tiers, q) : undefined;
+  return !t || t.min <= 1 || q % t.min === 0;
+}
+/** Smallest allowed quantity ≥ q. */
+export function snapQty(tiers: Tier[] | undefined, q: number, moq = 1): number {
+  let x = Math.max(1, moq, Math.floor(q) || 0);
+  for (let i = 0; i < 100000 && !validQty(tiers, x, moq); i++) x++;
+  return x;
+}
+export const nextQty = (tiers: Tier[] | undefined, q: number, moq = 1) => snapQty(tiers, q + 1, moq);
+export function prevQty(tiers: Tier[] | undefined, q: number, moq = 1): number {
+  for (let x = q - 1; x >= Math.max(1, moq); x--) if (validQty(tiers, x, moq)) return x;
+  return snapQty(tiers, moq, moq);
+}
+/** The step size at quantity q (for hints), e.g. 5 inside the "5+" tier. */
+export const stepAt = (tiers: Tier[] | undefined, q: number) => { const t = tiers?.length ? tierAt(tiers, q) : undefined; return t && t.min > 1 ? t.min : 1; };

@@ -21,8 +21,7 @@ export function Recommended({ title = "مقترح لك", exclude = [], boostCat,
   if (!list?.length) return null;
   return (
     <section className="sec">
-      <div className="sec-h"><h2><i className="ph ph-sparkle" style={{ color: "var(--gold)" }} /> {title}</h2></div>
-      <small style={{ marginTop: -8 }}>على حسب المنتجات اللي شفتها وبحثت عنها</small>
+      <div className="sec-h"><h2>{title}</h2></div>
       <div className="grid" style={st(`--m:2;--d:${cols}`)}>{list.map((p) => <ProductCard key={p.id} p={p} />)}</div>
     </section>
   );

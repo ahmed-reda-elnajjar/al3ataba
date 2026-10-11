@@ -52,7 +52,7 @@ function PromoProducts({ pr }: { pr: Promo }) {
   if (!items.length) return <Empty icon="ph-tag" title="مفيش منتجات في العرض ده دلوقتي" />;
   return (
     <>
-      <div className="grid" style={st("--m:2;--d:5")}>{items.map((p) => <ProductCard key={p.id} p={p} />)}</div>
+      <div className="grid" style={st("--m:2;--d:5")}>{items.map((p) => <ProductCard key={p.id} p={p} showPromo />)}</div>
       {more && <div className="row" style={{ justifyContent: "center", marginTop: 16 }}><button className="btn o" onClick={() => { setLoading(false); loadFrom(srcs, false); }}>عرض المزيد</button></div>}
     </>
   );

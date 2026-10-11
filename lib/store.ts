@@ -88,3 +88,25 @@ export async function productsByIds(ids: string[]): Promise<Product[]> {
   }
   return ids.map((id) => out.find((p) => p.id === id)).filter(Boolean) as Product[];
 }
+
+/** Interleave products so no single category dominates a row: round-robin across categories,
+ *  keeping each category's own order (e.g. newest first). Categories appear in order of their first item. */
+export function mixByCategory(list: Product[], n: number): Product[] {
+  const groups = new Map<string, Product[]>();
+  for (const p of list) { const k = p.categoryId || "-"; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(p); }
+  const qs = [...groups.values()];
+  const out: Product[] = [];
+  for (let round = 0; out.length < n && qs.some((q) => q.length > round); round++)
+    for (const q of qs) { if (q[round]) out.push(q[round]); if (out.length >= n) break; }
+  return out;
+}
+
+/** "وصل حديثاً" with variety: newest products + a couple from every category, mixed so each category gets a turn. */
+export async function newArrivalsMixed(n: number, catIds: string[]): Promise<Product[]> {
+  const [page, ...samples] = await Promise.all([
+    pageActiveProducts(Math.max(30, n * 3)).then((r) => r.items).catch(() => [] as Product[]),
+    ...catIds.slice(0, 16).map((c) => sampleCategory(c, 3).catch(() => [] as Product[])),
+  ]);
+  const uniq = Array.from(new Map([...page, ...newest(samples.flat())].map((p) => [p.id, p])).values());
+  return mixByCategory(newest(uniq), n);
+}

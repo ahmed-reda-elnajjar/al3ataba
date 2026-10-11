@@ -7,7 +7,7 @@ import { ADMIN_EMAILS, DEFAULT_SETTINGS } from "./config";
 import { getSettings } from "./store";
 import { attachUser } from "./reco";
 import type { CartItem, Merchant, Product, Promo, Settings } from "./types";
-import { applyPromos, listPromos } from "./promos";
+import { applyPromos, listPromos, priceCart } from "./promos";
 
 type Ctx = {
   user: User | null; ready: boolean; loggedIn: boolean; isAdmin: boolean;
@@ -87,7 +87,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const value = useMemo<Ctx>(() => ({
-    user, ready, loggedIn, isAdmin, merchant, settings, promos, withPromo, items, count: items.length,
+    user, ready, loggedIn, isAdmin, merchant, settings, promos, withPromo, items: priceCart(items), count: items.length,
     add: (i) => save(items.some((x) => x.id === i.id) ? items.map((x) => (x.id === i.id ? i : x)) : [...items, i]),
     remove: (id) => save(items.filter((x) => x.id !== id)),
     setQty: (id, q) => save(items.map((x) => (x.id === id ? { ...x, qty: q } : x))),

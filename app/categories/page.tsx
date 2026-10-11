@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useAsync } from "@/lib/hooks";
 import { listCategories, sampleCategory } from "@/lib/store";
 import { Empty, Img } from "@/components/Ui";
+import { usePersonalCats } from "@/components/Promos";
+
+const EMPTY: never[] = [];
 
 export default function Categories() {
   const [q, setQ] = useState("");
@@ -13,7 +16,8 @@ export default function Categories() {
     const samples = await Promise.all(cats.map((c) => sampleCategory(c.id, 3).catch(() => [])));
     return cats.map((c, i) => ({ ...c, sample: samples[i].map((p) => p.name).join(" - ") }));
   }, []);
-  const list = (data ?? []).filter((c) => !q.trim() || c.name.includes(q.trim()));
+  const { list: ordered, offers } = usePersonalCats(data ?? EMPTY);
+  const list = ordered.filter((c) => !q.trim() || c.name.includes(q.trim()));
   return (
     <div className="wc" style={{ maxWidth: 820 }}>
       <h1 style={{ marginBottom: 12 }}>الأقسام</h1>
@@ -27,7 +31,7 @@ export default function Categories() {
             <Link key={c.id} href={`/search?cat=${c.id}`} className="catrow">
               <Img src={c.image} ic={c.icon} ratio={1} w={160} />
               <div className="sp">
-                <b style={{ fontSize: 16 }}>{c.name}</b>
+                <b style={{ fontSize: 16 }}>{c.name}</b>{offers.has(c.id) && <span className="bd" style={{ background: "#c0392b", color: "#fff", marginInlineStart: 6 }}><i className="ph-fill ph-tag" />عرض</span>}
                 <small style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.sample || "لسه مفيش منتجات"}</small>
               </div>
               <i className="ph ph-caret-left" style={{ color: "#b3a789" }} />

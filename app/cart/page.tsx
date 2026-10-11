@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { fmt } from "@/lib/format";
-import { priceFor } from "@/lib/pricing";
+import { nextQty, prevQty, priceFor, snapQty } from "@/lib/pricing";
+import { offerTotals } from "@/lib/promos";
 import { useApp } from "@/lib/providers";
 import { Empty, Img } from "@/components/Ui";
 
@@ -16,7 +17,7 @@ export default function Cart() {
   const change = (id: string, q: number) => {
     const it = items.find((x) => x.id === id);
     if (!it) return;
-    const qty = Math.max(it.moq, q);
+    const qty = snapQty(it.tiers, q, it.moq);
     add({ ...it, qty, price: it.tiers ? priceFor(it.tiers, qty) : it.price });
   };
   return (
@@ -31,10 +32,11 @@ export default function Cart() {
                 <div key={i.id} className="row">
                   <Img src={i.image} ic="ph-package" ratio={1} w={160} style={{ width: 72, borderRadius: 12, flex: "none", background: "#fff", border: "1px solid var(--bd)" }} />
                   <div className="sp col g4">
-                    <b>{i.name}</b>{i.promo && <span className="bd" style={{ background: "#c0392b", color: "#fff", alignSelf: "flex-start" }}><i className="ph-fill ph-tag" />{i.promo}</span>}
+                    <b>{i.name}</b>{i.promo && <span className="bd" style={{ background: i.promoMin && !i.promoOn ? "#9a8f7a" : "#c0392b", color: "#fff", alignSelf: "flex-start" }}><i className="ph-fill ph-tag" />{i.promo}{i.promoMin ? (i.promoOn ? " ✓" : "") : ""}</span>}
+                    {i.promoMin && !i.promoOn && <small style={{ color: "#c0392b" }}>ضيف {i.promoMin - (offerTotals(items)[i.promoId!] || 0)} قطعة كمان من نفس العرض علشان الخصم يتطبق</small>}
                     <small>{fmt(i.price)} ج.م / {i.unit}</small>
                     {i.fixed ? <small>الكمية: {i.qty} {i.unit} (حسب عرض السعر)</small> : (
-                      <div className="qty" style={{ alignSelf: "flex-start" }}><button style={{ height: 34, width: 34 }} aria-label="أكثر" onClick={() => change(i.id, i.qty + Math.max(1, Math.round(i.moq / 2)))}><i className="ph ph-plus" /></button><b style={{ minWidth: 44, textAlign: "center" }}>{i.qty}</b><button style={{ height: 34, width: 34 }} aria-label="أقل" onClick={() => change(i.id, i.qty - Math.max(1, Math.round(i.moq / 2)))}><i className="ph ph-minus" /></button></div>
+                      <div className="qty" style={{ alignSelf: "flex-start" }}><button style={{ height: 34, width: 34 }} aria-label="أكثر" onClick={() => change(i.id, nextQty(i.tiers, i.qty, i.moq))}><i className="ph ph-plus" /></button><b style={{ minWidth: 44, textAlign: "center" }}>{i.qty}</b><button style={{ height: 34, width: 34 }} aria-label="أقل" onClick={() => change(i.id, prevQty(i.tiers, i.qty, i.moq))}><i className="ph ph-minus" /></button></div>
                     )}
                   </div>
                   <div className="col g8" style={{ alignItems: "flex-end" }}>

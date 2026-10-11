@@ -1,7 +1,7 @@
 "use client";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { dbI } from "./firebase";
-import { pageActiveProducts, sampleCategory } from "./store";
+import { listCategories, mixByCategory, pageActiveProducts, sampleCategory } from "./store";
 import { priceRange } from "./pricing";
 import type { Product } from "./types";
 
@@ -61,11 +61,32 @@ export async function recommend(n = 10, opts: { exclude?: string[]; boostCat?: s
   const i = readInterest();
   if (!hasInterest(i) && !opts.boostCat) return [];
   if (opts.boostCat) i.cats[opts.boostCat] = (i.cats[opts.boostCat] || 0) + 2;
-  const top = Object.entries(i.cats).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
-  const lists = await Promise.all([...top.map((c) => sampleCategory(c, 12).catch(() => [] as Product[])), pageActiveProducts(12).then((r) => r.items).catch(() => [] as Product[])]);
+  const ranked = Object.entries(i.cats).sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  const top = ranked.slice(0, 4);
+  const others = (await listCategories().catch(() => [])).map((c) => c.id).filter((c) => !top.includes(c)).slice(0, 6);
+  const lists = await Promise.all([
+    ...top.map((c) => sampleCategory(c, 10).catch(() => [] as Product[])),
+    ...others.map((c) => sampleCategory(c, 3).catch(() => [] as Product[])),
+    pageActiveProducts(30).then((r) => r.items).catch(() => [] as Product[]),
+  ]);
   const ex = new Set(opts.exclude || []);
   const all = Array.from(new Map(lists.flat().filter((p) => !ex.has(p.id)).map((p) => [p.id, p])).values());
-  return all.map((p) => ({ p, s: score(p, i) })).filter((x) => x.s > 0.3).sort((a, b) => b.s - a.s).slice(0, n).map((x) => x.p);
+  const sorted = all.map((p) => ({ p, s: score(p, i) })).sort((a, b) => b.s - a.s);
+  // variety: at most ~a third of the row from one category, the rest filled from other categories
+  const cap = Math.max(2, Math.ceil(n / 3));
+  const per: Record<string, number> = {};
+  const out: Product[] = [];
+  for (const { p, s } of sorted) {
+    if (out.length >= n) break;
+    if (s <= 0.3 && out.length >= Math.ceil(n / 2)) continue;
+    if ((per[p.categoryId] || 0) >= cap) continue;
+    per[p.categoryId] = (per[p.categoryId] || 0) + 1; out.push(p);
+  }
+  if (out.length < n) { // still short: fill with other categories first, then anything
+    const rest = sorted.map((x) => x.p).filter((p) => !out.includes(p));
+    out.push(...mixByCategory(rest.filter((p) => !per[p.categoryId]), n - out.length));
+  }
+  return out.slice(0, n);
 }
 
 /* ---- sync for signed-in users (profiles/{uid}) ---- */

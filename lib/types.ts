@@ -12,13 +12,14 @@ export type Product = {
   cod: boolean; madeInEgypt: boolean; logoPrint: boolean;
   status: PStatus; keywords: string[]; createdAt?: { seconds: number };
   /* client-only: set by applyPromos() when a live offer covers this product */
-  origTiers?: Tier[]; promo?: { id: string; title: string; label: string; color: string };
+  origTiers?: Tier[]; promo?: { id: string; title: string; label: string; color: string; min?: number; tiers?: Tier[] };
 };
 export type Promo = {
   id: string; title: string; sub?: string; kind: "percent" | "fixed"; value: number;
   scope: "all" | "category" | "products"; categoryIds: string[]; productIds: string[];
   startsAt?: string; endsAt?: string; // YYYY-MM-DD, optional
   active: boolean; color?: string; image?: string; order?: number; createdAt?: { seconds: number };
+  minQty?: number; // offer applies only when the cart holds at least this many pieces from the offer (mixing products allowed)
 };
 export type Category = { id: string; name: string; icon: string; order: number; image?: string };
 export type Merchant = {
@@ -28,7 +29,7 @@ export type Merchant = {
 };
 export type CartItem = {
   id: string; productId: string; name: string; merchantId: string; merchant: string;
-  qty: number; price: number; promo?: string; image?: string; unit: string; moq: number; fixed?: boolean; tiers?: Tier[]; cod?: boolean;
+  qty: number; price: number; promo?: string; promoId?: string; promoMin?: number; promoTiers?: Tier[]; promoOn?: boolean; image?: string; unit: string; moq: number; fixed?: boolean; tiers?: Tier[]; cod?: boolean;
 };
 export type Order = {
   id: string; orderNo: string; userId: string; buyerName: string; phone: string;

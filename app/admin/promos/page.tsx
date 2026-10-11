@@ -13,7 +13,7 @@ import { PromoCard } from "@/components/Promos";
 import type { Promo } from "@/lib/types";
 
 type Draft = Omit<Promo, "id">;
-const blank = (): Draft => ({ title: "", sub: "", kind: "percent", value: 10, scope: "category", categoryIds: [], productIds: [], startsAt: "", endsAt: "", active: true, color: "", image: "", order: 0 });
+const blank = (): Draft => ({ title: "", sub: "", kind: "percent", value: 10, scope: "category", categoryIds: [], productIds: [], startsAt: "", endsAt: "", active: true, color: "", image: "", order: 0, minQty: 0 });
 const COLORS = ["", "#c0392b", "#0f4535", "#b08a4f", "#7d3c98", "#1f618d", "#d35400"];
 
 export default function AdminPromos() {
@@ -87,6 +87,11 @@ export default function AdminPromos() {
         <div className="fld"><label>{d.kind === "percent" ? "نسبة الخصم %" : "قيمة الخصم من سعر الوحدة (ج.م)"}</label>
           <input className="in" inputMode="decimal" value={d.value || ""} onChange={(e) => set("value", Number(e.target.value.replace(/[^\d.]/g, "")) || 0)} />
           <small>مثال: منتج سعره {sample} ج.م هيبقى <b>{discounted(sample, d)} ج.م</b> · الخصم بيتطبق على كل شرائح الكمية.</small>
+        </div>
+
+        <div className="fld"><label>شرط الكمية: أقل عدد قطع لازم يشتريها من العرض (اختياري)</label>
+          <input className="in" inputMode="numeric" placeholder="مثال: 5 — سيبه فاضي لو مفيش شرط" value={d.minQty || ""} onChange={(e) => set("minQty", Number(e.target.value.replace(/\D/g, "")) || 0)} />
+          <small>{(d.minQty ?? 0) > 1 ? <>الخصم بيتطبق بس لما مجموع القطع من منتجات العرض في السلة يوصل <b>{d.minQty}</b> (يقدر يجمع من أكتر من منتج). قبل كده بيشوف السعر العادي ورسالة "ناقصك كام قطعة".</> : "من غير شرط: الخصم بيتطبق على أي كمية."}</small>
         </div>
 
         <b>العرض على إيه؟</b>
