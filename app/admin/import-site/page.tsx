@@ -11,6 +11,8 @@ import { DEFAULT_RULES, tiersFromRules, type PriceRule } from "@/lib/pricing";
 import { saveRules } from "@/lib/rules";
 import { createSupplier, listSuppliers } from "@/lib/suppliers";
 import { RulesEditor } from "@/components/Markup";
+import { StockSync } from "@/components/StockSync";
+import { availability } from "@/lib/stock";
 import type { Category } from "@/lib/types";
 
 /* Imports a partner's catalogue from a 6valley (6amTech) store — e.g. alwazeers.com — through its public API. */
@@ -25,23 +27,17 @@ type SrcProduct = {
 /* ---- stock (6valley keeps a total in current_stock and a qty per variation, e.g. per phone model) ---- */
 const vkey = (s: string) => s.toLowerCase().replace(/\s+/g, "");
 const variations = (p: SrcProduct) => arr<{ type: string; qty?: number | string }>(p.variation).filter((v) => v && v.type);
-/** Pieces in stock, or null when the site doesn't say (digital products, old API). */
-function stockOf(p: SrcProduct): number | null {
-  if (p.product_type === "digital") return null;
-  const vs = variations(p);
-  if (vs.length) return vs.reduce((s, v) => s + Math.max(0, Number(v.qty) || 0), 0);
-  return p.current_stock === undefined || p.current_stock === null || p.current_stock === "" ? null : Math.max(0, Number(p.current_stock) || 0);
-}
 /** Choice options (model, size…) keeping only the values that still have stock. */
 function inStockOptions(p: SrcProduct) {
   const opts = arr<{ title: string; options: string[] }>(p.choice_options);
-  const live = variations(p).filter((v) => (Number(v.qty) || 0) > 0).map((v) => vkey(v.type).split("-"));
+  const moq = Math.max(1, Number(p.minimum_order_qty) || Number(p.min_qty) || 1);
+  const live = variations(p).filter((v) => (Number(v.qty) || 0) >= moq).map((v) => vkey(v.type).split("-"));
   if (!variations(p).length) return opts;
   return opts.map((o) => ({ ...o, options: (o.options || []).filter((val) => live.some((parts) => parts.includes(vkey(val)))) })).filter((o) => o.options.length);
 }
 type SrcCat = { id: number; name: string; childes?: SrcCat[] };
 const flatCats = (cs: SrcCat[]): SrcCat[] => cs.flatMap((c) => [c, ...flatCats(c.childes || [])]);
-type Row = { key: string; src: SrcProduct; stock: number | null; docId?: string; docStatus?: string; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
+type Row = { key: string; src: SrcProduct; stock: number | null; out: boolean; docId?: string; docStatus?: string; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
 
 const COLOR_AR: Record<string, string> = { black: "أسود", white: "أبيض", red: "أحمر", blue: "أزرق", green: "أخضر", yellow: "أصفر", pink: "بينك", purple: "موف", gray: "رمادي", grey: "رمادي", silver: "فضي", gold: "ذهبي", brown: "بني", orange: "برتقالي", navy: "كحلي", beige: "بيج" };
 const arr = <T,>(v: unknown): T[] => { if (Array.isArray(v)) return v as T[]; if (typeof v === "string") { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } } return []; };
@@ -126,10 +122,9 @@ export default function ImportSite() {
       const key = `${host}:${p.id}`;
       const moq = String(Math.max(1, Number(p.minimum_order_qty) || Number(p.min_qty) || 1));
       const dup = seen.has(key) || names.has(norm(p.name || ""));
-      const stock = stockOf(p);
-      const out = stock === 0;
-      if (!seen.has(key) && out) return { key, src: p, stock, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: false, note: "خلصان من المخزن عندهم" };
-      return { key, src: p, stock, docId: ids[key]?.id, docStatus: ids[key]?.status, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !dup, state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : dup ? "فيه منتج عندك بنفس الاسم — علّمه لو مختلف" : "" };
+      const { stock, out } = availability(p);
+      if (!seen.has(key) && out) return { key, src: p, stock, out, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: false, note: "خلصان من المخزن عندهم" };
+      return { key, src: p, stock, out, docId: ids[key]?.id, docStatus: ids[key]?.status, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !dup, state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : dup ? "فيه منتج عندك بنفس الاسم — علّمه لو مختلف" : "" };
     }));
     setSrcCats(flatCats(categories));
     // auto-match categories by name
@@ -189,10 +184,10 @@ export default function ImportSite() {
   };
 
   const upd = (key: string, v: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...v } : r)));
-  const visible = rows.filter((r) => (!onlyPublished || r.src.published !== 0) && (!hideOut || r.stock !== 0 || r.state === "ok"));
-  const outCount = rows.filter((r) => r.stock === 0 && r.state !== "ok").length;
+  const visible = rows.filter((r) => (!onlyPublished || r.src.published !== 0) && (!hideOut || !r.out || r.state === "ok"));
+  const outCount = rows.filter((r) => r.out && r.state !== "ok").length;
   // already on our site but sold out at the partner → offer to hide them
-  const soldOutHere = rows.filter((r) => r.stock === 0 && r.docId && r.docStatus === "active");
+  const soldOutHere = rows.filter((r) => r.out && r.docId && r.docStatus === "active");
   const [hmsg, setHmsg] = useState("");
   const hideSoldOut = async () => {
     if (!soldOutHere.length || !confirm(`إخفاء ${soldOutHere.length} منتج خلصوا من عند المورد؟ (تقدر تنشرهم تاني بعدين)`)) return;
@@ -258,6 +253,7 @@ export default function ImportSite() {
   const ex = `${b}/api/v1/products/latest?limit=100&offset=1&guest_id=1`;
   return (
     <>
+      <StockSync />
       <div className="card col">
         <h3>استيراد منتجات من موقع تاجر</h3>
         <small>للمواقع المبنية على نظام 6valley (زي alwazeers.com). بيجيب الاسم والسعر بعد الخصم وأقل كمية والصور والوصف والألوان والمقاسات.</small>
@@ -348,7 +344,7 @@ export default function ImportSite() {
                     <input className="in" inputMode="numeric" value={r.pack} placeholder="قطع في الشريحة" title="لو المنتج بيتباع شريحة كاملة: اكتب عدد القطع (سعرهم بيتحسب للقطعة × العدد)" onChange={(e) => upd(r.key, { pack: e.target.value.replace(/\D/g, "") })} disabled={r.state === "ok"} style={/شريح/.test(r.name) && !r.pack ? { borderColor: "var(--warn)", background: "#fdf4e3" } : undefined} />
                   </div>
                   {/شريح/.test(r.name) && !r.pack && <small style={{ color: "var(--warn)" }}>⚠ الاسم فيه "شريحة": اكتب عدد القطع في الشريحة علشان السعر يتحسب صح.</small>}
-                  <small>سعرهم {r.base} ج.م{packOf(r) > 1 ? ` للقطعة × ${packOf(r)} = ${unitBase(r)} للشريحة` : ""} · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(unitBase(r))}${packOf(r) > 1 ? " للشريحة" : ""}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{r.stock === 0 ? " · خلصان من المخزن" : r.stock != null ? ` · المخزون عندهم: ${r.stock}` : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
+                  <small>سعرهم {r.base} ج.م{packOf(r) > 1 ? ` للقطعة × ${packOf(r)} = ${unitBase(r)} للشريحة` : ""} · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(unitBase(r))}${packOf(r) > 1 ? " للشريحة" : ""}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{r.out ? ` · خلصان (المتاح ${r.stock ?? 0} أقل من أقل طلب ${availability(r.src).moq})` : r.stock != null ? ` · المخزون عندهم: ${r.stock}` : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
                 </div>
                 {r.state === "ok" ? <span className="bd v">{r.note || "اتضاف"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : r.note ? <span className="bd w">{r.note}</span> : null}
               </div>
