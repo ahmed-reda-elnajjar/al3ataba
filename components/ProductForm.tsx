@@ -6,12 +6,13 @@ import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
-import { isLowQuality, isVideoUrl, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
+import { isLowQuality, isVideoUrl, uploadFromUrl, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
 import { COLORS, swatch } from "@/lib/colors";
 import { useDragSort } from "@/lib/dnd";
 import { tiersFromMarkup, type MarkupTier } from "@/lib/pricing";
 import { MarkupEditor } from "./Markup";
 import { listSuppliers } from "@/lib/suppliers";
+import { Cropper } from "./Cropper";
 import { sized } from "@/lib/media";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
@@ -74,6 +75,13 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [busy, setBusy] = useState(false);
   const [up, setUp] = useState(false);
   const imgDnd = useDragSort<string>(media, (u) => u, (next) => setMedia(next));
+  const [cropping, setCropping] = useState<string | null>(null);
+  const saveCrop = async (f: File) => {
+    const old = cropping;
+    const url = await uploadImage(f, user, "products");
+    setMedia((xs) => xs.map((x) => (x === old ? url : x)));
+    setCropping(null);
+  };
   const move = (from: number, to: number) => setMedia((xs) => { if (to < 0 || to >= xs.length || from === to) return xs; const a = [...xs]; const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; });
   const [err, setErr] = useState("");
 
@@ -151,6 +159,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
               {isVideoUrl(u) ? <video src={u} poster={videoPoster(u)} muted playsInline preload="metadata" {...imgDnd.handle(u)} /> : <img src={sized(u, 240)} alt="" draggable={false} {...imgDnd.handle(u)} />}
               {i === 0 ? <span className="main">الرئيسية</span> : isVideoUrl(u) ? <span className="main" style={{ background: "var(--pd)" }}><i className="ph ph-play" style={{ fontSize: 11 }} /> فيديو</span> : null}
               <button type="button" aria-label="حذف" onClick={() => setMedia(media.filter((x) => x !== u))}>×</button>
+              {!isVideoUrl(u) && <button type="button" className="cropbtn" aria-label="قص الصورة" title="قص الصورة" onClick={() => setCropping(u)}><i className="ph ph-crop" /></button>}
               <div className="mv">
                 <button type="button" aria-label="لقدّام" disabled={i === 0} onClick={() => move(i, i - 1)}><i className="ph ph-caret-right" /></button>
                 {i > 0 && <button type="button" aria-label="اجعلها الرئيسية" onClick={() => move(i, 0)}><i className="ph ph-star" /></button>}
@@ -232,6 +241,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
       </div>
       {isAdmin && (sups.data?.length ?? 0) > 0 && <div className="fld" style={{ maxWidth: 240 }}><label>المورد (للإدارة بس)</label><select className="in" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">بدون</option>{sups.data!.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
       {isAdmin && <div className="fld" style={{ maxWidth: 240 }}><label>الحالة</label><select className="in" value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}><option value="active">منشور</option><option value="pending">قيد المراجعة</option><option value="hidden">مخفي</option></select></div>}
+      {cropping && <Cropper src={cropping} onCancel={() => setCropping(null)} onDone={saveCrop} prepare={(u) => uploadFromUrl(u)} />}
       {err && <div className="alert e">{err}</div>}
       <div className="row"><button className="btn" disabled={busy || up} onClick={save}>{up ? (upMsg || "استنى، الملفات بتترفع…") : busy ? "جاري الحفظ…" : "حفظ المنتج"}</button><button className="btn o" type="button" onClick={() => router.push(back)}>إلغاء</button></div>
     </div>
