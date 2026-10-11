@@ -9,8 +9,19 @@ export function tiersFromMarkup(base: number, mt: MarkupTier[]): Tier[] {
   return out;
 }
 
+/** Price bands: "if the original piece price is ≥ from → use these quantity tiers". */
+export type PriceRule = { from: number; tiers: MarkupTier[] };
+export const DEFAULT_RULES: PriceRule[] = [{ from: 0, tiers: [{ min: 1, pct: 10 }, { min: 5, pct: 5 }] }];
+export function pickRule(base: number, rules: PriceRule[]): PriceRule | undefined {
+  return [...rules].sort((a, b) => b.from - a.from).find((r) => base >= r.from) ?? rules[0];
+}
+export function tiersFromRules(base: number, rules: PriceRule[]): { tiers: Tier[]; rule?: PriceRule } {
+  const rule = pickRule(base, rules);
+  return { tiers: rule ? tiersFromMarkup(base, rule.tiers) : [], rule };
+}
+
 /** Price after a % markup, rounded up to a whole pound. */
-export const withMarkup = (base: number, pct: number) => Math.ceil(base * (1 + (pct || 0) / 100));
+export const withMarkup = (base: number, pct: number) => Math.ceil(Math.round(base * (100 + (pct || 0))) / 100 - 1e-9); // avoids 100×1.1 = 110.0000001 → 111
 
 export const sortTiers = (t: Tier[]) => [...t].sort((a, b) => a.min - b.min);
 export function priceFor(tiers: Tier[], qty: number): number {

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
@@ -7,8 +7,9 @@ import { useAsync } from "@/lib/hooks";
 import { listApprovedMerchants, listCategories } from "@/lib/store";
 import { uploadFromUrl } from "@/lib/img";
 import { HOUSE, ICONS } from "@/lib/config";
-import { tiersFromMarkup, type MarkupTier } from "@/lib/pricing";
-import { MarkupEditor } from "@/components/Markup";
+import { DEFAULT_RULES, tiersFromRules, type PriceRule } from "@/lib/pricing";
+import { saveRules } from "@/lib/rules";
+import { RulesEditor } from "@/components/Markup";
 import type { Category } from "@/lib/types";
 
 /* Imports a partner's catalogue from a 6valley (6amTech) store — e.g. alwazeers.com — through its public API. */
@@ -36,7 +37,6 @@ function imageUrls(base: string, p: SrcProduct) {
 const norm = (s: string) => s.toLowerCase().replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, " ").trim();
 
 export default function ImportSite() {
-  const { user } = useApp();
   const cats = useAsync(listCategories, []);
   const merchants = useAsync(listApprovedMerchants, []);
   const [base, setBase] = useState("https://alwazeers.com");
@@ -50,8 +50,13 @@ export default function ImportSite() {
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(0);
   const [onlyPublished, setOnlyPublished] = useState(false);
-  const [mt, setMt] = useState<MarkupTier[]>([{ min: 1, pct: 10 }, { min: 5, pct: 5 }]);
-  const tiersOf = (base: number) => tiersFromMarkup(base, mt);
+  const { user, settings } = useApp();
+  const [rules, setRules] = useState<PriceRule[]>(settings.markupRules?.length ? settings.markupRules : DEFAULT_RULES);
+  const savedRules = JSON.stringify(settings.markupRules ?? null);
+  useEffect(() => { if (settings.markupRules?.length) setRules(settings.markupRules); // saved defaults arrive after first render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedRules]);
+  const tiersOf = (base: number) => tiersFromRules(base, rules).tiers;
   const tiersText = (base: number) => tiersOf(base).map((t) => `${t.min}+ ← ${t.price}`).join("  ·  ");
   const b = base.replace(/\/+$/, "").split("?")[0];
 
@@ -127,6 +132,7 @@ export default function ImportSite() {
     const missing = srcCatIds.filter((id) => chosen.some((r) => r.cat === id) && !map[id]);
     if (missing.length) return setErr("اختار قسم لكل أقسام الموقع التاني (فوق).");
     setErr(""); setRunning(true);
+    saveRules(rules).catch(() => {});
     // create the new categories first
     const ours: Category[] = [...(cats.data ?? [])];
     const resolved: Record<string, Category> = {};
@@ -155,7 +161,7 @@ export default function ImportSite() {
         if (p.code) specs.push({ k: "كود المنتج", v: String(p.code) });
         await addDoc(collection(dbI(), "products"), {
           name, description: strip(p.details), categoryId: c.id, categoryName: c.name, unit: p.unit === "pc" || !p.unit ? "قطعة" : p.unit, moq: q,
-          tiers, basePrices: [r.base], markup: null, markupTiers: r.edited ? null : mt, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
+          tiers, basePrices: [r.base], markup: null, markupTiers: r.edited ? null : tiersFromRules(r.base, rules).rule?.tiers ?? null, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
           cod: true, madeInEgypt: false, logoPrint: false, status: "active",
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
@@ -212,7 +218,7 @@ export default function ImportSite() {
                 <select className="in" value={owner} onChange={(e) => setOwner(e.target.value)}><option value={HOUSE.id}>العتبة (الإدارة)</option>{merchants.data?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
               <label className="chk"><input type="checkbox" checked={onlyPublished} onChange={(e) => setOnlyPublished(e.target.checked)} />المنشور عندهم بس</label>
             </div>
-            <div className="col g8"><b>نسبة الزيادة حسب الكمية</b><MarkupEditor value={mt} onChange={setMt} /></div>
+            <div className="col g8"><b>نسبة الزيادة حسب سعر القطعة والكمية</b><RulesEditor value={rules} onChange={setRules} /></div>
             <div className="row wrap">
               <b className="sp">{visible.length} منتج · {chosen.length} متعلّم · {done} اتضاف</b>
               <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => (r.state === "ok" ? r : { ...r, on: true })))}>علّم الكل</button>

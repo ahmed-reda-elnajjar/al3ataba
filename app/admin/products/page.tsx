@@ -1,15 +1,17 @@
 "use client";
 import { sized } from "@/lib/media";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, getDocs, limit, query, updateDoc, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useAsync } from "@/lib/hooks";
 import { withId } from "@/lib/store";
 import { ms } from "@/lib/format";
 import { Empty, Status } from "@/components/Ui";
-import { rangeText, tiersFromMarkup, type MarkupTier } from "@/lib/pricing";
-import { MarkupEditor } from "@/components/Markup";
+import { DEFAULT_RULES, rangeText, tiersFromRules, type PriceRule } from "@/lib/pricing";
+import { saveRules } from "@/lib/rules";
+import { useApp } from "@/lib/providers";
+import { RulesEditor } from "@/components/Markup";
 import type { Product } from "@/lib/types";
 
 export default function AdminProducts() {
@@ -22,22 +24,29 @@ export default function AdminProducts() {
   const set = async (p: Product, status: string) => { await updateDoc(doc(dbI(), "products", p.id), { status }); reload(); };
   const del = async (p: Product) => { if (confirm(`حذف "${p.name}" نهائيًا؟`)) { await deleteDoc(doc(dbI(), "products", p.id)); reload(); } };
   const [who, setWho] = useState("");
-  const [mt, setMt] = useState<MarkupTier[]>([{ min: 1, pct: 10 }, { min: 5, pct: 5 }]);
+  const { settings } = useApp();
+  const [rules, setRules] = useState<PriceRule[]>(settings.markupRules?.length ? settings.markupRules : DEFAULT_RULES);
+  const savedRules = JSON.stringify(settings.markupRules ?? null);
+  useEffect(() => { if (settings.markupRules?.length) setRules(settings.markupRules); // saved defaults arrive after first render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedRules]);
   const [mmsg, setMmsg] = useState("");
   const merchants = Array.from(new Map((data ?? []).map((p) => [p.merchantId, p.merchantName])).entries());
   // Applies the markup on top of each product's ORIGINAL price (saved the first time), so applying it twice never stacks.
   const applyMarkup = async () => {
     const target = (data ?? []).filter((p) => who === "all" || p.merchantId === who);
-    const good = mt.filter((x) => x.min > 0);
+    const good = rules.map((r) => ({ ...r, tiers: r.tiers.filter((x) => x.min > 0) })).filter((r) => r.tiers.length);
     if (!who || !good.length || !target.length) return setMmsg("اختار التاجر وحدد الشرايح.");
-    if (!confirm(`هتتغيّر أسعار ${target.length} منتج حسب الشرايح (${good.map((x) => `من ${x.min}: +${x.pct}%`).join("، ")}) محسوبة على السعر الأصلي. متأكد؟`)) return;
+    if (!confirm(`هتتغيّر أسعار ${target.length} منتج حسب شرايح السعر والكمية، محسوبة على السعر الأصلي. متأكد؟`)) return;
+    saveRules(good).catch(() => {});
     let b = writeBatch(dbI()), k = 0;
     for (const p of target) {
       // original price = saved base, or (first time) today's price for the smallest quantity
       const base = p.basePrices?.[0] ?? [...p.tiers].sort((x, y) => x.min - y.min)[0]?.price ?? 0;
       if (!(base > 0)) continue;
-      const tiers = tiersFromMarkup(base, good);
-      b.update(doc(dbI(), "products", p.id), { basePrices: [base], markup: null, markupTiers: good, tiers, moq: tiers[0].min });
+      const { tiers, rule } = tiersFromRules(base, good);
+      if (!tiers.length) continue;
+      b.update(doc(dbI(), "products", p.id), { basePrices: [base], markup: null, markupTiers: rule?.tiers ?? null, tiers, moq: tiers[0].min });
       if (++k % 400 === 0) { await b.commit(); b = writeBatch(dbI()); }
     }
     await b.commit();
@@ -61,7 +70,7 @@ export default function AdminProducts() {
               {merchants.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
             </select>
           </div>
-          <MarkupEditor value={mt} onChange={setMt} />
+          <RulesEditor value={rules} onChange={setRules} />
           <button className="btn" style={{ alignSelf: "flex-start" }} onClick={applyMarkup}>تطبيق على منتجات التاجر</button>
           {mmsg && <span className="ok">{mmsg}</span>}
         </div>

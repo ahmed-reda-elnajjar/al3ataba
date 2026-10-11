@@ -41,4 +41,5 @@ export type Offer = {
 export type Settings = {
   shippingPerMerchant: number; whatsapp: string; supportPhone: string; paymentInstructions: string; announcement: string;
   heroTitle: string; heroSub: string; heroImage: string; city: string;
+  markupRules?: { from: number; tiers: { min: number; pct: number }[] }[];
 };
