@@ -22,7 +22,7 @@ type SrcProduct = {
   unit_price: number; discount?: number; discount_type?: string; details?: string | null; published?: number; status?: number; code?: string;
 };
 type SrcCat = { id: number; name: string };
-type Row = { key: string; src: SrcProduct; name: string; base: number; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
+type Row = { key: string; src: SrcProduct; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
 
 const COLOR_AR: Record<string, string> = { black: "أسود", white: "أبيض", red: "أحمر", blue: "أزرق", green: "أخضر", yellow: "أصفر", pink: "بينك", purple: "موف", gray: "رمادي", grey: "رمادي", silver: "فضي", gold: "ذهبي", brown: "بني", orange: "برتقالي", navy: "كحلي", beige: "بيج" };
 const arr = <T,>(v: unknown): T[] => { if (Array.isArray(v)) return v as T[]; if (typeof v === "string") { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } } return []; };
@@ -60,6 +60,8 @@ export default function ImportSite() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedRules]);
   const tiersOf = (base: number) => tiersFromRules(base, rules).tiers;
+  const packOf = (r: Row) => Math.max(0, Math.floor(Number(r.pack) || 0));
+  const unitBase = (r: Row) => (packOf(r) > 1 ? Math.round(r.base * packOf(r) * 100) / 100 : r.base);
   const tiersText = (base: number) => tiersOf(base).map((t) => `${t.min}+ ← ${t.price}`).join("  ·  ");
   const b = base.replace(/\/+$/, "").split("?")[0];
 
@@ -71,7 +73,7 @@ export default function ImportSite() {
     setRows(uniq.map((p) => {
       const key = `${host}:${p.id}`;
       const moq = String(Math.max(1, Number(p.minimum_order_qty) || Number(p.min_qty) || 1));
-      return { key, src: p, name: p.name || "", base: finalPrice(p), price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !seen.has(key), state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : "" };
+      return { key, src: p, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !seen.has(key), state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : "" };
     }));
     setSrcCats(categories);
     // auto-match categories by name
@@ -152,7 +154,7 @@ export default function ImportSite() {
     }
     for (const r of chosen) {
       const c = resolved[r.cat];
-      const tiers = r.edited ? [{ min: Math.max(1, Number(r.moq) || 1), price: Number(r.price) }] : tiersOf(r.base);
+      const tiers = r.edited ? [{ min: Math.max(1, Number(r.moq) || 1), price: Number(r.price) }] : tiersOf(unitBase(r));
       const q = tiers[0]?.min || 1, price = tiers[0]?.price || 0;
       if (!(price > 0) || r.name.trim().length < 2 || !c) { upd(r.key, { state: "err", note: !c ? "مفيش قسم" : "ناقص اسم أو سعر" }); continue; }
       upd(r.key, { state: "busy", note: "" });
@@ -165,8 +167,8 @@ export default function ImportSite() {
         const specs = arr<{ title: string; options: string[] }>(p.choice_options).map((o) => ({ k: o.title, v: (o.options || []).join("، ") })).filter((s) => s.k && s.v);
         if (p.code) specs.push({ k: "كود المنتج", v: String(p.code) });
         await addDoc(collection(dbI(), "products"), {
-          name, description: strip(p.details), categoryId: c.id, categoryName: c.name, unit: p.unit === "pc" || !p.unit ? "قطعة" : p.unit, moq: q,
-          tiers, basePrices: [r.base], markup: null, markupTiers: r.edited ? null : tiersFromRules(r.base, rules).rule?.tiers ?? null, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
+          name, description: strip(p.details), categoryId: c.id, categoryName: c.name, unit: packOf(r) > 1 ? "شريحة" : p.unit === "pc" || !p.unit ? "قطعة" : p.unit, moq: q,
+          tiers, basePrices: [unitBase(r)], markup: null, markupTiers: r.edited ? null : tiersFromRules(unitBase(r), rules).rule?.tiers ?? null, packSize: packOf(r) > 1 ? packOf(r) : null, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
           cod: true, madeInEgypt: false, logoPrint: false, status: "active",
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, supplierId: supplierId || null, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
@@ -244,8 +246,10 @@ export default function ImportSite() {
                   <div className="row">
                     <input className="in" inputMode="decimal" value={r.price} placeholder="سعر مخصوص (اختياري)" onChange={(e) => upd(r.key, { price: e.target.value, edited: !!e.target.value })} disabled={r.state === "ok"} />
                     <input className="in" inputMode="numeric" value={r.moq} placeholder="أقل كمية" onChange={(e) => upd(r.key, { moq: e.target.value })} disabled={r.state === "ok"} />
+                    <input className="in" inputMode="numeric" value={r.pack} placeholder="قطع في الشريحة" title="لو المنتج بيتباع شريحة كاملة: اكتب عدد القطع (سعرهم بيتحسب للقطعة × العدد)" onChange={(e) => upd(r.key, { pack: e.target.value.replace(/\D/g, "") })} disabled={r.state === "ok"} style={/شريح/.test(r.name) && !r.pack ? { borderColor: "var(--warn)", background: "#fdf4e3" } : undefined} />
                   </div>
-                  <small>سعرهم {r.base} ج.م · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(r.base)}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
+                  {/شريح/.test(r.name) && !r.pack && <small style={{ color: "var(--warn)" }}>⚠ الاسم فيه "شريحة": اكتب عدد القطع في الشريحة علشان السعر يتحسب صح.</small>}
+                  <small>سعرهم {r.base} ج.م{packOf(r) > 1 ? ` للقطعة × ${packOf(r)} = ${unitBase(r)} للشريحة` : ""} · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(unitBase(r))}${packOf(r) > 1 ? " للشريحة" : ""}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
                 </div>
                 {r.state === "ok" ? <span className="bd v">{r.note || "اتضاف"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : null}
               </div>

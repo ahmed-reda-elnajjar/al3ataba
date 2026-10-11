@@ -33,10 +33,10 @@ export function ProductCard({ p, verified }: { p: Product; verified?: boolean })
         <Link href={`/product/${p.id}`} className="nm">{p.name}</Link>
         <div className="row g4 wrap">
           {verified && <span className="bd v"><i className="ph ph-seal-check" />موثّق</span>}
-          <small style={{ fontSize: 12 }}>أقل طلب {p.moq} {p.unit}</small>
+          <small style={{ fontSize: 12 }}>{(p.packSize ?? 0) > 1 ? `${p.unit} ${p.packSize} قطعة` : `أقل طلب ${p.moq} ${p.unit}`}</small>
         </div>
         <div className="foot">
-          <div className="sp price">{rangeText(p)} <small>ج.م</small></div>
+          <div className="sp price">{rangeText(p)} <small>ج.م{(p.packSize ?? 0) > 1 ? ` / ${p.unit}` : ""}</small></div>
           <button className="add" aria-label="أضف للسلة" title={inCart ? "في السلة" : `أضف ${p.moq} ${p.unit} للسلة`} onClick={quick}><i className={`ph ${inCart ? "ph-check" : "ph-plus"}`} /></button>
         </div>
       </div>

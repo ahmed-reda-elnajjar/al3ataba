@@ -57,13 +57,29 @@ export default function ProductPage() {
             {p.madeInEgypt && <span className="bd">صنع في مصر</span>}{p.cod && <span className="bd">يقبل الدفع عند الاستلام</span>}{p.logoPrint && <span className="bd">طباعة لوجو</span>}
           </div>
           <h1 style={{ fontSize: 24 }}>{p.name}</h1>
-          <div className="row" style={{ alignItems: "baseline" }}><span className="price" style={{ fontSize: 28 }}>{fmt(price)} <small>ج.م / {p.unit}</small></span>{tiers.length > 1 && <span className="old" style={{ textDecoration: "none" }}>من {fmt(tiers[tiers.length - 1].price)} لـ {fmt(tiers[0].price)} حسب الكمية</span>}</div>
-          <div className="card z"><table className="tbl"><tbody>
-            <tr><th>الكمية ({p.unit})</th><th>السعر / {p.unit}</th></tr>
-            {tiers.map((t, i) => { const next = tiers[i + 1]; const on = price === t.price && q >= t.min && (!next || q < next.min); return <tr key={t.min} className={on ? "hl" : ""}><td>{next ? `${t.min} – ${next.min - 1}` : `${t.min} +`}</td><td>{fmt(t.price)} ج.م</td></tr>; })}
-          </tbody></table></div>
+          {(p.packSize ?? 0) > 1 && <div className="alert row g8" style={{ padding: "8px 12px" }}><i className="ph ph-stack" style={{ color: "var(--gold)" }} /><span>بيتباع <b>{p.unit} كاملة</b> فيها <b>{p.packSize} قطعة</b> · سعر القطعة ≈ <b>{fmt(price / (p.packSize as number))} ج.م</b></span></div>}
+          <div className="row" style={{ alignItems: "baseline" }}><span className="price" style={{ fontSize: 28 }}>{fmt(price)} <small>ج.م / {p.unit}{(p.packSize ?? 0) > 1 ? ` (${p.packSize} قطعة)` : ""}</small></span>{tiers.length > 1 && <span className="old" style={{ textDecoration: "none" }}>من {fmt(tiers[tiers.length - 1].price)} لـ {fmt(tiers[0].price)} حسب الكمية</span>}</div>
+          {tiers.length > 1 ? (
+            <div className="card z"><table className="tbl"><tbody>
+              <tr><th>الكمية</th><th>سعر ال{p.unit}</th><th>التوفير</th></tr>
+              {tiers.map((t, i) => {
+                const next = tiers[i + 1];
+                const on = q >= t.min && (!next || q < next.min);
+                const save = tiers[0].price > t.price ? Math.round((1 - t.price / tiers[0].price) * 100) : 0;
+                return (
+                  <tr key={t.min} className={on ? "hl" : ""} style={{ cursor: "pointer" }} onClick={() => setQty(Math.max(t.min, p.moq))}>
+                    <td>{next ? (next.min - 1 === t.min ? `${t.min} ${p.unit}` : `من ${t.min} لـ ${next.min - 1} ${p.unit}`) : `${t.min} ${p.unit} أو أكتر`}</td>
+                    <td><b>{fmt(t.price)} ج.م</b></td>
+                    <td>{save ? <span className="bd v">وفّر {save}%</span> : <small>—</small>}</td>
+                  </tr>
+                );
+              })}
+            </tbody></table></div>
+          ) : (
+            <div className="alert">سعر ال{p.unit}: <b>{fmt(tiers[0]?.price ?? 0)} ج.م</b> · أقل طلب {p.moq} {p.unit}</div>
+          )}
           {p.colors?.length > 0 && <div className="col g8"><b>اختار اللون: <span style={{ color: "var(--gold)" }}>{color}</span></b><div className="row g8 wrap">{p.colors.map((c) => <button type="button" key={c} className={`chip${c === color ? " on" : ""}`} onClick={() => setColor(c)}><span className="sw" style={{ background: swatch(c) || "var(--cream)" }} />{c}</button>)}</div></div>}
-          <small>أقل طلب: {p.moq} {p.unit}</small>
+          {tiers.length > 1 && <small>أقل طلب: {p.moq} {p.unit} · اضغط على أي سطر في الجدول علشان تختار الكمية دي</small>}
           <div className="row">
             <div className="qty">
               <button aria-label="أكثر" onClick={() => setQty(q + Math.max(1, Math.round(p.moq / 2)))}><i className="ph ph-plus" /></button>

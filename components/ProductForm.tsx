@@ -16,7 +16,7 @@ import { sized } from "@/lib/media";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
 
-const UNITS = ["قطعة", "كرتونة", "دستة", "كيس", "كيلو", "طن", "متر", "طقم", "علبة", "باليت"];
+const UNITS = ["قطعة", "شريحة", "سيري", "كرتونة", "دستة", "كيس", "كيلو", "طن", "متر", "طقم", "علبة", "باليت"];
 
 export function ProductForm({ id, back }: { id?: string; back: string }) {
   const { user, isAdmin, merchant } = useApp();
@@ -39,14 +39,18 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [categoryId, setCategoryId] = useState(p?.categoryId ?? "");
   const [unit, setUnit] = useState(p?.unit ?? "قطعة");
   const [moq, setMoq] = useState(String(p?.moq ?? 1));
+  const [pack, setPack] = useState(p?.packSize ? String(p.packSize) : "");
+  const packN = unit !== "قطعة" ? Math.max(0, Math.floor(Number(pack) || 0)) : 0;
   const [tiers, setTiers] = useState<{ min: string; price: string }[]>(p?.tiers?.map((t) => ({ min: String(t.min), price: String(t.price) })) ?? [{ min: "1", price: "" }]);
   // optional: original (supplier) price + quantity-based markup → generates the price tiers
   const [base, setBase] = useState(p?.basePrices?.[0] ? String(p.basePrices[0]) : "");
   const [mt, setMt] = useState<MarkupTier[]>(p?.markupTiers?.length ? p.markupTiers : [{ min: 1, pct: 10 }, { min: 5, pct: 5 }]);
   const [fromMarkup, setFromMarkup] = useState(!!p?.markupTiers?.length);
+  const [perPiece, setPerPiece] = useState(false); // the supplier price typed above is for ONE piece → × pack size
   const applyMt = () => {
-    const b = Number(base);
+    let b = Number(base);
     if (!(b > 0)) return setErr("اكتب السعر الأصلي الأول.");
+    if (perPiece && packN > 1) { b = Math.round(b * packN * 100) / 100; setBase(String(b)); setPerPiece(false); }
     const t = tiersFromMarkup(b, mt);
     if (!t.length) return;
     setErr(""); setTiers(t.map((x) => ({ min: String(x.min), price: String(x.price) }))); setMoq(String(t[0].min)); setFromMarkup(true);
@@ -109,7 +113,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     const owner = isAdmin && !p ? HOUSE : p ? { id: p.merchantId, name: p.merchantName } : { id: user, name: merchant?.name ?? "" };
     const data = {
       name: name.trim(), description: description.trim(), categoryId, categoryName: cat?.name ?? "",
-      unit, moq: m, tiers: t.sort((a, b) => a.min - b.min), governorate,
+      unit, moq: m, tiers: t.sort((a, b) => a.min - b.min), governorate, packSize: packN > 1 ? packN : null,
       // prices typed by hand become the new "original" price for future % markups
       ...(fromMarkup && Number(base) > 0 && JSON.stringify(t.map((x) => [x.min, x.price])) === JSON.stringify(tiersFromMarkup(Number(base), mt).map((x) => [x.min, x.price]))
         ? { basePrices: [Number(base)], markup: null, markupTiers: mt.filter((x) => x.min > 0) }
@@ -163,15 +167,26 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         <div className="fld"><label>وحدة البيع</label><select className="in" value={unit} onChange={(e) => setUnit(e.target.value)}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select></div>
         <div className="fld"><label>أقل كمية للطلب</label><input className="in" inputMode="numeric" value={moq} onChange={(e) => setMoq(e.target.value.replace(/\D/g, ""))} /></div>
       </div>
+      {unit !== "قطعة" && (
+        <div className="fld" style={{ maxWidth: 360 }}><label>عدد القطع في ال{unit} الواحدة <small>(مثال: شريحة فيها 435 جراب)</small></label>
+          <input className="in" inputMode="numeric" value={pack} placeholder="اختياري" onChange={(e) => setPack(e.target.value.replace(/\D/g, ""))} />
+          {packN > 1 && <small>كل الأسعار تحت هي سعر ال{unit} كاملة ({packN} قطعة)، والعميل هيشوف سعر القطعة محسوب لوحده.</small>}
+        </div>
+      )}
       <details className="card" open={fromMarkup || undefined} style={{ background: "var(--cream2)" }}>
         <summary style={{ cursor: "pointer", fontWeight: 700 }}>حساب السعر من سعر التاجر + نسبة زيادة حسب الكمية</summary>
         <div className="col" style={{ marginTop: 10 }}>
-          <div className="fld" style={{ maxWidth: 240 }}><label>السعر الأصلي عند التاجر (ج.م)</label><input className="in" inputMode="decimal" value={base} onChange={(e) => setBase(e.target.value.replace(/[^\d.]/g, ""))} /></div>
+          <div className="row wrap">
+            <div className="fld" style={{ maxWidth: 240 }}><label>السعر الأصلي عند التاجر (ج.م)</label><input className="in" inputMode="decimal" value={base} onChange={(e) => setBase(e.target.value.replace(/[^\d.]/g, ""))} /></div>
+            {packN > 1 && <div className="seg" style={{ alignSelf: "flex-end" }}><button type="button" className={perPiece ? "on" : ""} onClick={() => setPerPiece(true)}>للقطعة الواحدة</button><button type="button" className={!perPiece ? "on" : ""} onClick={() => setPerPiece(false)}>لل{unit} كاملة</button></div>}
+          </div>
+          {packN > 1 && perPiece && Number(base) > 0 && <small>سعر ال{unit} عند التاجر = {base} × {packN} = <b>{Math.round(Number(base) * packN)} ج.م</b>، والزيادة هتتحسب عليه.</small>}
           <MarkupEditor value={mt} onChange={setMt} />
           <button type="button" className="btn o" style={{ alignSelf: "flex-start" }} onClick={applyMt}>احسب الأسعار ←</button>
         </div>
       </details>
-      <div className="fld"><label>تسعير بالكمية (كل ما الكمية تزيد السعر يقل)</label>
+      {packN > 1 && <button type="button" className="btn o sm2" style={{ alignSelf: "flex-start" }} onClick={() => { if (confirm(`هتضرب كل الأسعار في ${packN} (لو الأسعار مكتوبة للقطعة الواحدة). متأكد؟`)) { setTiers(tiers.map((x) => ({ ...x, price: x.price ? String(Math.round(Number(x.price) * packN)) : x.price }))); setFromMarkup(false); } }}>الأسعار مكتوبة للقطعة؟ اضربها في {packN} ←</button>}
+      <div className="fld"><label>تسعير بالكمية {packN > 1 ? `(سعر ال${unit} كاملة)` : "(كل ما الكمية تزيد السعر يقل)"}</label>
         {tiers.map((t, i) => (
           <div key={i} className="row">
             <input className="in" inputMode="numeric" placeholder="من كمية" value={t.min} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, min: e.target.value.replace(/\D/g, "") } : x)))} />

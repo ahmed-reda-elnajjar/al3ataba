@@ -6,6 +6,7 @@ export type Product = {
   unit: string; moq: number; tiers: Tier[]; governorate: string;
   merchantId: string; merchantName: string; ownerUid: string;
   images: string[]; videos?: string[]; media?: string[]; specs: Spec[]; colors: string[];
+  packSize?: number | null; // pieces inside one sale unit (e.g. a "شريحة" of 435 cases)
   supplierId?: string | null; // internal supplier (admin-only name in /suppliers)
   basePrices?: number[] | null; markup?: number | null; markupTiers?: { min: number; pct: number }[] | null; // original prices before our % markup (one per tier)
   cod: boolean; madeInEgypt: boolean; logoPrint: boolean;
