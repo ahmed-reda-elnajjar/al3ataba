@@ -72,10 +72,10 @@ export function HeroSlider() {
   }, [i, n, paused]);
   const go = (d: number) => setI((v) => (v + d + n) % n);
   return (
-    <section className="hslide" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+    <section className={`hslide${n > 1 ? " multi" : ""}`} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
       onTouchStart={(e) => { x0.current = e.touches[0].clientX; setPaused(true); }}
       onTouchEnd={(e) => { const s = x0.current; x0.current = null; setPaused(false); if (s == null) return; const dx = e.changedTouches[0].clientX - s; if (Math.abs(dx) > 40) go(dx > 0 ? 1 : -1); }}>
-      <div className="hs-track" style={{ transform: `translateX(${i * 100}%)` }}>
+      <div className="hs-track" style={{ transform: `translateX(min(calc(${i} * (var(--w) + var(--g))), calc(${n} * (var(--w) + var(--g)) - var(--g) - 100%)))` }}>
         <div className="hero2 hs-item" aria-hidden={i !== 0}>
           {settings.heroImage ? <img className="bg" src={sized(settings.heroImage, 1600)} alt="" /> : <Skyline className="sky" />}
           <div className="sh" />

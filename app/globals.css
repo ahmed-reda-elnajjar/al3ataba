@@ -354,9 +354,11 @@ a.card:hover{border-color:var(--gold)}
 .tile{position:relative}
 
 /* ---------- home hero slider ---------- */
-.hslide{position:relative;overflow:hidden;border-radius:18px;margin-bottom:20px}
-.hs-track{display:flex;transition:transform .55s cubic-bezier(.4,0,.2,1)}
-.hs-item{flex:0 0 100%;border-radius:0;color:#fff}
+.hslide{position:relative;overflow:hidden;margin-bottom:20px;--w:100%;--g:0px}
+.hslide.multi{--w:84%;--g:10px}
+@media(min-width:900px){.hslide.multi{--w:70%;--g:14px}}
+.hs-track{display:flex;gap:var(--g);transition:transform .55s cubic-bezier(.4,0,.2,1)}
+.hs-item{flex:0 0 var(--w);border-radius:18px;color:#fff;min-width:0}
 .hs-off{background:#c0392b;color:#fff;border-radius:10px;padding:4px 12px;font:700 15px Alexandria,sans-serif;display:inline-flex;align-items:center;gap:6px}
 .hs-nav{all:unset;cursor:pointer;position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;background:#fff3;color:#fff;display:grid;place-items:center;backdrop-filter:blur(4px);z-index:2}
 .hs-nav:hover{background:#fff5}.hs-nav i{font-size:20px}
