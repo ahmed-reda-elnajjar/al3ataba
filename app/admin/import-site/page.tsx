@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
@@ -20,10 +20,28 @@ type SrcProduct = {
   images?: string | (string | { image_name?: string })[]; thumbnail?: string; colors?: string | string[]; colors_formatted?: { name: string; code: string }[];
   choice_options?: string | { title: string; options: string[] }[]; category_ids?: string | { id: string | number }[]; category_id?: string | number;
   unit_price: number; discount?: number; discount_type?: string; details?: string | null; published?: number; status?: number; code?: string;
+  current_stock?: number | string; product_type?: string; variation?: string | { type: string; price?: number; sku?: string; qty?: number | string }[];
 };
+/* ---- stock (6valley keeps a total in current_stock and a qty per variation, e.g. per phone model) ---- */
+const vkey = (s: string) => s.toLowerCase().replace(/\s+/g, "");
+const variations = (p: SrcProduct) => arr<{ type: string; qty?: number | string }>(p.variation).filter((v) => v && v.type);
+/** Pieces in stock, or null when the site doesn't say (digital products, old API). */
+function stockOf(p: SrcProduct): number | null {
+  if (p.product_type === "digital") return null;
+  const vs = variations(p);
+  if (vs.length) return vs.reduce((s, v) => s + Math.max(0, Number(v.qty) || 0), 0);
+  return p.current_stock === undefined || p.current_stock === null || p.current_stock === "" ? null : Math.max(0, Number(p.current_stock) || 0);
+}
+/** Choice options (model, size…) keeping only the values that still have stock. */
+function inStockOptions(p: SrcProduct) {
+  const opts = arr<{ title: string; options: string[] }>(p.choice_options);
+  const live = variations(p).filter((v) => (Number(v.qty) || 0) > 0).map((v) => vkey(v.type).split("-"));
+  if (!variations(p).length) return opts;
+  return opts.map((o) => ({ ...o, options: (o.options || []).filter((val) => live.some((parts) => parts.includes(vkey(val)))) })).filter((o) => o.options.length);
+}
 type SrcCat = { id: number; name: string; childes?: SrcCat[] };
 const flatCats = (cs: SrcCat[]): SrcCat[] => cs.flatMap((c) => [c, ...flatCats(c.childes || [])]);
-type Row = { key: string; src: SrcProduct; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
+type Row = { key: string; src: SrcProduct; stock: number | null; docId?: string; docStatus?: string; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
 
 const COLOR_AR: Record<string, string> = { black: "أسود", white: "أبيض", red: "أحمر", blue: "أزرق", green: "أخضر", yellow: "أصفر", pink: "بينك", purple: "موف", gray: "رمادي", grey: "رمادي", silver: "فضي", gold: "ذهبي", brown: "بني", orange: "برتقالي", navy: "كحلي", beige: "بيج" };
 const arr = <T,>(v: unknown): T[] => { if (Array.isArray(v)) return v as T[]; if (typeof v === "string") { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } } return []; };
@@ -57,6 +75,7 @@ export default function ImportSite() {
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(0);
   const [onlyPublished, setOnlyPublished] = useState(false);
+  const [hideOut, setHideOut] = useState(true);
   const { user, settings } = useApp();
   const [sources, setSources] = useState<Source[]>([]);
   useEffect(() => { setSources(settings.importSources ?? []); }, [settings.importSources]);
@@ -95,9 +114,11 @@ export default function ImportSite() {
     const uniq = Array.from(new Map(products.map((p) => [p.id, p])).values());
     let seen = new Set<string>();
     let names = new Set<string>();
+    const ids: Record<string, { id: string; status: string }> = {};
     try {
       const old = await getDocs(collection(dbI(), "products")); // admin: every product, any source
       seen = new Set(old.docs.map((d) => d.get("sourceId") as string).filter(Boolean));
+      for (const d of old.docs) { const sid = d.get("sourceId") as string; if (sid) ids[sid] = { id: d.id, status: String(d.get("status") || "") }; }
       names = new Set(old.docs.map((d) => norm(String(d.get("name") || ""))).filter(Boolean));
     } catch { /* best effort */ }
     const host = new URL(b).host;
@@ -105,7 +126,10 @@ export default function ImportSite() {
       const key = `${host}:${p.id}`;
       const moq = String(Math.max(1, Number(p.minimum_order_qty) || Number(p.min_qty) || 1));
       const dup = seen.has(key) || names.has(norm(p.name || ""));
-      return { key, src: p, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !dup, state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : dup ? "فيه منتج عندك بنفس الاسم — علّمه لو مختلف" : "" };
+      const stock = stockOf(p);
+      const out = stock === 0;
+      if (!seen.has(key) && out) return { key, src: p, stock, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: false, note: "خلصان من المخزن عندهم" };
+      return { key, src: p, stock, docId: ids[key]?.id, docStatus: ids[key]?.status, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !dup, state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : dup ? "فيه منتج عندك بنفس الاسم — علّمه لو مختلف" : "" };
     }));
     setSrcCats(flatCats(categories));
     // auto-match categories by name
@@ -165,7 +189,19 @@ export default function ImportSite() {
   };
 
   const upd = (key: string, v: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...v } : r)));
-  const visible = rows.filter((r) => !onlyPublished || r.src.published !== 0);
+  const visible = rows.filter((r) => (!onlyPublished || r.src.published !== 0) && (!hideOut || r.stock !== 0 || r.state === "ok"));
+  const outCount = rows.filter((r) => r.stock === 0 && r.state !== "ok").length;
+  // already on our site but sold out at the partner → offer to hide them
+  const soldOutHere = rows.filter((r) => r.stock === 0 && r.docId && r.docStatus === "active");
+  const [hmsg, setHmsg] = useState("");
+  const hideSoldOut = async () => {
+    if (!soldOutHere.length || !confirm(`إخفاء ${soldOutHere.length} منتج خلصوا من عند المورد؟ (تقدر تنشرهم تاني بعدين)`)) return;
+    let bt = writeBatch(dbI()), k = 0;
+    for (const r of soldOutHere) { bt.update(doc(dbI(), "products", r.docId!), { status: "hidden", outOfStock: true }); if (++k % 400 === 0) { await bt.commit(); bt = writeBatch(dbI()); } }
+    await bt.commit();
+    setRows((rs) => rs.map((r) => (soldOutHere.includes(r) ? { ...r, docStatus: "hidden", note: "اتخفى (خلصان)" } : r)));
+    setHmsg(`اتخفى ${k} منتج ✓`);
+  };
   const chosen = visible.filter((r) => r.on && r.state !== "ok");
   const srcCatIds = useMemo(() => Array.from(new Set(rows.map((r) => r.cat))), [rows]);
   const catName = (id: string) => srcCats.find((c) => String(c.id) === id)?.name || `قسم رقم ${id}`;
@@ -204,7 +240,7 @@ export default function ImportSite() {
         if (!images.length) throw new Error("no-img");
         const p = r.src, name = r.name.trim();
         const colors = (p.colors_formatted?.length ? p.colors_formatted.map((x) => COLOR_AR[x.name.toLowerCase()] || x.name) : arr<string>(p.colors)).filter(Boolean);
-        const specs = arr<{ title: string; options: string[] }>(p.choice_options).map((o) => ({ k: o.title, v: (o.options || []).join("، ") })).filter((s) => s.k && s.v);
+        const specs = inStockOptions(p).map((o) => ({ k: o.title, v: (o.options || []).join("، ") })).filter((s) => s.k && s.v);
         if (p.code) specs.push({ k: "كود المنتج", v: String(p.code) });
         await addDoc(collection(dbI(), "products"), {
           name, description: strip(p.details), categoryId: c.id, categoryName: c.name, unit: packOf(r) > 1 ? "شريحة" : p.unit === "pc" || !p.unit ? "قطعة" : p.unit, moq: q,
@@ -279,7 +315,16 @@ export default function ImportSite() {
               <div className="fld" style={{ minWidth: 220 }}><label>المورد (للإدارة بس)</label>
                 <select className="in" value={supplier} onChange={(e) => setSupplier(e.target.value)}><option value="">بدون</option>{sup.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}<option value="__new">+ مورد جديد…</option></select></div>
               <label className="chk"><input type="checkbox" checked={onlyPublished} onChange={(e) => setOnlyPublished(e.target.checked)} />المنشور عندهم بس</label>
+              <label className="chk"><input type="checkbox" checked={hideOut} onChange={(e) => setHideOut(e.target.checked)} />إخفاء الخلصان من المخزن ({outCount})</label>
             </div>
+            {soldOutHere.length > 0 && (
+              <div className="alert row wrap" style={{ borderColor: "var(--err)" }}>
+                <i className="ph ph-package" style={{ color: "var(--err)", fontSize: 20 }} />
+                <span className="sp"><b>{soldOutHere.length}</b> منتج منشورين عندك بس خلصوا من المخزن عند المورد.</span>
+                <button className="btn r sm2" onClick={hideSoldOut}>إخفاءهم من الموقع</button>
+              </div>
+            )}
+            {hmsg && <span className="ok">{hmsg}</span>}
             <div className="col g8"><b>نسبة الزيادة حسب سعر القطعة والكمية</b><RulesEditor value={rules} onChange={setRules} /></div>
             <div className="row wrap">
               <b className="sp">{visible.length} منتج · {chosen.length} متعلّم · {done} اتضاف للمراجعة</b>
@@ -303,7 +348,7 @@ export default function ImportSite() {
                     <input className="in" inputMode="numeric" value={r.pack} placeholder="قطع في الشريحة" title="لو المنتج بيتباع شريحة كاملة: اكتب عدد القطع (سعرهم بيتحسب للقطعة × العدد)" onChange={(e) => upd(r.key, { pack: e.target.value.replace(/\D/g, "") })} disabled={r.state === "ok"} style={/شريح/.test(r.name) && !r.pack ? { borderColor: "var(--warn)", background: "#fdf4e3" } : undefined} />
                   </div>
                   {/شريح/.test(r.name) && !r.pack && <small style={{ color: "var(--warn)" }}>⚠ الاسم فيه "شريحة": اكتب عدد القطع في الشريحة علشان السعر يتحسب صح.</small>}
-                  <small>سعرهم {r.base} ج.م{packOf(r) > 1 ? ` للقطعة × ${packOf(r)} = ${unitBase(r)} للشريحة` : ""} · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(unitBase(r))}${packOf(r) > 1 ? " للشريحة" : ""}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
+                  <small>سعرهم {r.base} ج.م{packOf(r) > 1 ? ` للقطعة × ${packOf(r)} = ${unitBase(r)} للشريحة` : ""} · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(unitBase(r))}${packOf(r) > 1 ? " للشريحة" : ""}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{r.stock === 0 ? " · خلصان من المخزن" : r.stock != null ? ` · المخزون عندهم: ${r.stock}` : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
                 </div>
                 {r.state === "ok" ? <span className="bd v">{r.note || "اتضاف"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : r.note ? <span className="bd w">{r.note}</span> : null}
               </div>
