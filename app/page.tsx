@@ -8,6 +8,7 @@ import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { Skyline } from "@/components/Brand";
 import { Recommended } from "@/components/Recommend";
 import { HeroSlider, usePersonalCats } from "@/components/Promos";
+import { Rail } from "@/components/Rail";
 import { sized } from "@/lib/media";
 
 const EMPTY: never[] = [];
@@ -41,15 +42,15 @@ export default function Home() {
       {cats.length > 0 && (
         <section className="sec">
           <div className="sec-h"><h2>أقسام رئيسية</h2><Link href="/categories">عرض الكل</Link></div>
-          <div className="grid" style={st("--m:3;--d:6")}>
-            {cats.slice(0, 6).map((c) => (
+          <Rail>
+            {cats.map((c) => (
               <Link key={c.id} href={`/search?cat=${c.id}`} className="tile">
                 <Img src={c.image} ic={c.icon} ratio={1} w={300} />
                 {offers.has(c.id) && <span className="pbadge"><i className="ph-fill ph-tag" />عرض</span>}
                 <span>{c.name}</span>
               </Link>
             ))}
-          </div>
+          </Rail>
         </section>
       )}
 

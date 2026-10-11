@@ -318,6 +318,11 @@ export default function ImportSite() {
                 <i className="ph ph-package" style={{ color: "var(--err)", fontSize: 20 }} />
                 <span className="sp"><b>{soldOutHere.length}</b> منتج منشورين عندك بس خلصوا من المخزن عند المورد.</span>
                 <button className="btn r sm2" onClick={hideSoldOut}>إخفاءهم من الموقع</button>
+                <ul style={{ width: "100%", margin: "4px 0 0", paddingInlineStart: 20, lineHeight: 1.9, fontSize: 14 }}>
+                  {soldOutHere.map((r) => { const a = availability(r.src); return (
+                    <li key={r.key}><a href={`/admin/products/${r.docId}`} target="_blank" rel="noreferrer" style={{ color: "var(--pm)", fontWeight: 600 }}>{r.name}</a> <small>— المتاح عندهم {a.stock ?? 0}، وأقل طلب {a.moq}</small></li>
+                  ); })}
+                </ul>
               </div>
             )}
             {hmsg && <span className="ok">{hmsg}</span>}

@@ -420,3 +420,15 @@ a.card:hover{border-color:var(--gold)}
 @keyframes spLeg{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
 @keyframes spBar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @media(prefers-reduced-motion:reduce){.splash *{animation-duration:.01s!important;animation-iteration-count:1!important}}
+
+/* ---------- horizontal rail (main categories) ---------- */
+.rail{position:relative}
+.rail-track{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 20px) / 3);gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px}
+.rail-track::-webkit-scrollbar{display:none}
+.rail-track>*{scroll-snap-align:start;min-width:0}
+@media(min-width:700px){.rail-track{grid-auto-columns:calc((100% - 48px) / 4);gap:16px}}
+@media(min-width:1000px){.rail-track{grid-auto-columns:calc((100% - 80px) / 6)}}
+.rail-btn{all:unset;cursor:pointer;position:absolute;top:40%;transform:translateY(-50%);z-index:3;width:40px;height:40px;border-radius:50%;background:#fff;color:var(--pd);display:grid;place-items:center;box-shadow:0 4px 14px #0a342730;border:1px solid var(--bd)}
+.rail-btn:hover{background:var(--cream2)}.rail-btn i{font-size:20px}
+.rail-btn.prev{right:-12px}.rail-btn.next{left:-12px}
+@media(max-width:699px){.rail-btn{display:none}}
