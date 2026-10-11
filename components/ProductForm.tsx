@@ -9,6 +9,8 @@ import { listCategories } from "@/lib/store";
 import { isLowQuality, isVideoUrl, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
 import { COLORS, swatch } from "@/lib/colors";
 import { useDragSort } from "@/lib/dnd";
+import { tiersFromMarkup, type MarkupTier } from "@/lib/pricing";
+import { MarkupEditor } from "./Markup";
 import { sized } from "@/lib/media";
 import { GOVERNORATES, HOUSE } from "@/lib/config";
 import type { Product, Tier } from "@/lib/types";
@@ -37,6 +39,17 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [unit, setUnit] = useState(p?.unit ?? "قطعة");
   const [moq, setMoq] = useState(String(p?.moq ?? 1));
   const [tiers, setTiers] = useState<{ min: string; price: string }[]>(p?.tiers?.map((t) => ({ min: String(t.min), price: String(t.price) })) ?? [{ min: "1", price: "" }]);
+  // optional: original (supplier) price + quantity-based markup → generates the price tiers
+  const [base, setBase] = useState(p?.basePrices?.[0] ? String(p.basePrices[0]) : "");
+  const [mt, setMt] = useState<MarkupTier[]>(p?.markupTiers?.length ? p.markupTiers : [{ min: 1, pct: 10 }, { min: 5, pct: 5 }]);
+  const [fromMarkup, setFromMarkup] = useState(!!p?.markupTiers?.length);
+  const applyMt = () => {
+    const b = Number(base);
+    if (!(b > 0)) return setErr("اكتب السعر الأصلي الأول.");
+    const t = tiersFromMarkup(b, mt);
+    if (!t.length) return;
+    setErr(""); setTiers(t.map((x) => ({ min: String(x.min), price: String(x.price) }))); setMoq(String(t[0].min)); setFromMarkup(true);
+  };
   const [governorate, setGov] = useState(p?.governorate ?? merchant?.governorate ?? "القاهرة");
   // one ordered list of photos + videos; the first item is the cover shown on the product card
   const [media, setMedia] = useState<string[]>(p?.media?.length ? p.media : [...(p?.images ?? []), ...(p?.videos ?? [])]);
@@ -94,6 +107,10 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     const data = {
       name: name.trim(), description: description.trim(), categoryId, categoryName: cat?.name ?? "",
       unit, moq: m, tiers: t.sort((a, b) => a.min - b.min), governorate,
+      // prices typed by hand become the new "original" price for future % markups
+      ...(fromMarkup && Number(base) > 0 && JSON.stringify(t.map((x) => [x.min, x.price])) === JSON.stringify(tiersFromMarkup(Number(base), mt).map((x) => [x.min, x.price]))
+        ? { basePrices: [Number(base)], markup: null, markupTiers: mt.filter((x) => x.min > 0) }
+        : p && JSON.stringify(t.map((x) => [x.min, x.price])) !== JSON.stringify((p.tiers ?? []).map((x) => [x.min, x.price])) ? { basePrices: null, markup: null, markupTiers: null } : {}),
       media, images: images.length ? images : [videoPoster(videos[0])], videos, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
       specs: specs.filter((s) => s.k.trim() && s.v.trim()), cod, madeInEgypt: made, logoPrint: logo,
       status: isAdmin ? status : (p?.status ?? "active"),
@@ -142,6 +159,14 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         <div className="fld"><label>وحدة البيع</label><select className="in" value={unit} onChange={(e) => setUnit(e.target.value)}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select></div>
         <div className="fld"><label>أقل كمية للطلب</label><input className="in" inputMode="numeric" value={moq} onChange={(e) => setMoq(e.target.value.replace(/\D/g, ""))} /></div>
       </div>
+      <details className="card" open={fromMarkup || undefined} style={{ background: "var(--cream2)" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>حساب السعر من سعر التاجر + نسبة زيادة حسب الكمية</summary>
+        <div className="col" style={{ marginTop: 10 }}>
+          <div className="fld" style={{ maxWidth: 240 }}><label>السعر الأصلي عند التاجر (ج.م)</label><input className="in" inputMode="decimal" value={base} onChange={(e) => setBase(e.target.value.replace(/[^\d.]/g, ""))} /></div>
+          <MarkupEditor value={mt} onChange={setMt} />
+          <button type="button" className="btn o" style={{ alignSelf: "flex-start" }} onClick={applyMt}>احسب الأسعار ←</button>
+        </div>
+      </details>
       <div className="fld"><label>تسعير بالكمية (كل ما الكمية تزيد السعر يقل)</label>
         {tiers.map((t, i) => (
           <div key={i} className="row">

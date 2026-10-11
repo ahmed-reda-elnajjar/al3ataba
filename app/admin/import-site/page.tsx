@@ -7,6 +7,8 @@ import { useAsync } from "@/lib/hooks";
 import { listApprovedMerchants, listCategories } from "@/lib/store";
 import { uploadFromUrl } from "@/lib/img";
 import { HOUSE, ICONS } from "@/lib/config";
+import { tiersFromMarkup, type MarkupTier } from "@/lib/pricing";
+import { MarkupEditor } from "@/components/Markup";
 import type { Category } from "@/lib/types";
 
 /* Imports a partner's catalogue from a 6valley (6amTech) store — e.g. alwazeers.com — through its public API. */
@@ -18,7 +20,7 @@ type SrcProduct = {
   unit_price: number; discount?: number; discount_type?: string; details?: string | null; published?: number; status?: number; code?: string;
 };
 type SrcCat = { id: number; name: string };
-type Row = { key: string; src: SrcProduct; name: string; price: string; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
+type Row = { key: string; src: SrcProduct; name: string; base: number; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
 
 const COLOR_AR: Record<string, string> = { black: "أسود", white: "أبيض", red: "أحمر", blue: "أزرق", green: "أخضر", yellow: "أصفر", pink: "بينك", purple: "موف", gray: "رمادي", grey: "رمادي", silver: "فضي", gold: "ذهبي", brown: "بني", orange: "برتقالي", navy: "كحلي", beige: "بيج" };
 const arr = <T,>(v: unknown): T[] => { if (Array.isArray(v)) return v as T[]; if (typeof v === "string") { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } } return []; };
@@ -48,6 +50,9 @@ export default function ImportSite() {
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(0);
   const [onlyPublished, setOnlyPublished] = useState(false);
+  const [mt, setMt] = useState<MarkupTier[]>([{ min: 1, pct: 10 }, { min: 5, pct: 5 }]);
+  const tiersOf = (base: number) => tiersFromMarkup(base, mt);
+  const tiersText = (base: number) => tiersOf(base).map((t) => `${t.min}+ ← ${t.price}`).join("  ·  ");
   const b = base.replace(/\/+$/, "").split("?")[0];
 
   const accept = async (products: SrcProduct[], categories: SrcCat[]) => {
@@ -58,7 +63,7 @@ export default function ImportSite() {
     setRows(uniq.map((p) => {
       const key = `${host}:${p.id}`;
       const moq = String(Math.max(1, Number(p.minimum_order_qty) || Number(p.min_qty) || 1));
-      return { key, src: p, name: p.name || "", price: String(finalPrice(p)), moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !seen.has(key), state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : "" };
+      return { key, src: p, name: p.name || "", base: finalPrice(p), price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !seen.has(key), state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : "" };
     }));
     setSrcCats(categories);
     // auto-match categories by name
@@ -135,7 +140,9 @@ export default function ImportSite() {
       } else if (map[id]) { const c = ours.find((x) => x.id === map[id]); if (c) resolved[id] = c; }
     }
     for (const r of chosen) {
-      const price = Number(r.price), q = Math.max(1, Number(r.moq) || 1), c = resolved[r.cat];
+      const c = resolved[r.cat];
+      const tiers = r.edited ? [{ min: Math.max(1, Number(r.moq) || 1), price: Number(r.price) }] : tiersOf(r.base);
+      const q = tiers[0]?.min || 1, price = tiers[0]?.price || 0;
       if (!(price > 0) || r.name.trim().length < 2 || !c) { upd(r.key, { state: "err", note: !c ? "مفيش قسم" : "ناقص اسم أو سعر" }); continue; }
       upd(r.key, { state: "busy", note: "" });
       try {
@@ -148,7 +155,7 @@ export default function ImportSite() {
         if (p.code) specs.push({ k: "كود المنتج", v: String(p.code) });
         await addDoc(collection(dbI(), "products"), {
           name, description: strip(p.details), categoryId: c.id, categoryName: c.name, unit: p.unit === "pc" || !p.unit ? "قطعة" : p.unit, moq: q,
-          tiers: [{ min: q, price }], governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
+          tiers, basePrices: [r.base], markup: null, markupTiers: r.edited ? null : mt, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
           cod: true, madeInEgypt: false, logoPrint: false, status: "active",
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
@@ -205,6 +212,7 @@ export default function ImportSite() {
                 <select className="in" value={owner} onChange={(e) => setOwner(e.target.value)}><option value={HOUSE.id}>العتبة (الإدارة)</option>{merchants.data?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
               <label className="chk"><input type="checkbox" checked={onlyPublished} onChange={(e) => setOnlyPublished(e.target.checked)} />المنشور عندهم بس</label>
             </div>
+            <div className="col g8"><b>نسبة الزيادة حسب الكمية</b><MarkupEditor value={mt} onChange={setMt} /></div>
             <div className="row wrap">
               <b className="sp">{visible.length} منتج · {chosen.length} متعلّم · {done} اتضاف</b>
               <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => (r.state === "ok" ? r : { ...r, on: true })))}>علّم الكل</button>
@@ -221,10 +229,10 @@ export default function ImportSite() {
                 <div className="sp col g8" style={{ minWidth: 220 }}>
                   <input className="in" value={r.name} onChange={(e) => upd(r.key, { name: e.target.value })} disabled={r.state === "ok"} />
                   <div className="row">
-                    <input className="in" inputMode="decimal" value={r.price} placeholder="السعر" onChange={(e) => upd(r.key, { price: e.target.value })} disabled={r.state === "ok"} />
+                    <input className="in" inputMode="decimal" value={r.price} placeholder="سعر مخصوص (اختياري)" onChange={(e) => upd(r.key, { price: e.target.value, edited: !!e.target.value })} disabled={r.state === "ok"} />
                     <input className="in" inputMode="numeric" value={r.moq} placeholder="أقل كمية" onChange={(e) => upd(r.key, { moq: e.target.value })} disabled={r.state === "ok"} />
                   </div>
-                  <small>{catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
+                  <small>سعرهم {r.base} ج.م · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(r.base)}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
                 </div>
                 {r.state === "ok" ? <span className="bd v">{r.note || "اتضاف"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : null}
               </div>
