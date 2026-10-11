@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
@@ -21,7 +21,8 @@ type SrcProduct = {
   choice_options?: string | { title: string; options: string[] }[]; category_ids?: string | { id: string | number }[]; category_id?: string | number;
   unit_price: number; discount?: number; discount_type?: string; details?: string | null; published?: number; status?: number; code?: string;
 };
-type SrcCat = { id: number; name: string };
+type SrcCat = { id: number; name: string; childes?: SrcCat[] };
+const flatCats = (cs: SrcCat[]): SrcCat[] => cs.flatMap((c) => [c, ...flatCats(c.childes || [])]);
 type Row = { key: string; src: SrcProduct; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
 
 const COLOR_AR: Record<string, string> = { black: "أسود", white: "أبيض", red: "أحمر", blue: "أزرق", green: "أخضر", yellow: "أصفر", pink: "بينك", purple: "موف", gray: "رمادي", grey: "رمادي", silver: "فضي", gold: "ذهبي", brown: "بني", orange: "برتقالي", navy: "كحلي", beige: "بيج" };
@@ -36,6 +37,9 @@ function imageUrls(base: string, p: SrcProduct) {
   return urls.slice(0, 8);
 }
 const norm = (s: string) => s.toLowerCase().replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, " ").trim();
+
+type Source = { name: string; url: string; supplierId?: string };
+const cleanUrl = (u: string) => u.trim().replace(/\/+$/, "").split("?")[0];
 
 export default function ImportSite() {
   const cats = useAsync(listCategories, []);
@@ -54,6 +58,28 @@ export default function ImportSite() {
   const [done, setDone] = useState(0);
   const [onlyPublished, setOnlyPublished] = useState(false);
   const { user, settings } = useApp();
+  const [sources, setSources] = useState<Source[]>([]);
+  useEffect(() => { setSources(settings.importSources ?? []); }, [settings.importSources]);
+  const saveSources = async (next: Source[]) => {
+    setSources(next);
+    try { await setDoc(doc(dbI(), "settings", "site"), { importSources: next }, { merge: true }); } catch { setErr("مقدرتش أحفظ اللينكات — اتأكد إنك داخل بحساب الأدمن."); }
+  };
+  const currentSrc = sources.find((s) => cleanUrl(s.url) === cleanUrl(base));
+  const addSource = () => {
+    const url = cleanUrl(base);
+    if (!/^https?:\/\//.test(url)) return setErr("اكتب اللينك كامل يبدأ بـ https://");
+    const name = prompt("اسم المصدر (مثال: الوزير):", currentSrc?.name || "")?.trim();
+    if (!name) return;
+    const sid = supplier && supplier !== "__new" ? supplier : currentSrc?.supplierId;
+    saveSources([...sources.filter((s) => cleanUrl(s.url) !== url), { name, url, ...(sid ? { supplierId: sid } : {}) }]);
+    setMsg(`اتحفظ "${name}" ✓`);
+  };
+  const pickSource = (url: string) => {
+    const s = sources.find((x) => x.url === url);
+    if (!s) return;
+    setBase(s.url); setRows([]); setMsg(""); setErr("");
+    if (s.supplierId) setSupplier(s.supplierId);
+  };
   const [rules, setRules] = useState<PriceRule[]>(settings.markupRules?.length ? settings.markupRules : DEFAULT_RULES);
   const savedRules = JSON.stringify(settings.markupRules ?? null);
   useEffect(() => { if (settings.markupRules?.length) setRules(settings.markupRules); // saved defaults arrive after first render
@@ -68,14 +94,20 @@ export default function ImportSite() {
   const accept = async (products: SrcProduct[], categories: SrcCat[]) => {
     const uniq = Array.from(new Map(products.map((p) => [p.id, p])).values());
     let seen = new Set<string>();
-    try { const old = await getDocs(query(collection(dbI(), "products"), where("source", "==", "6valley"))); seen = new Set(old.docs.map((d) => d.get("sourceId") as string)); } catch { /* best effort */ }
+    let names = new Set<string>();
+    try {
+      const old = await getDocs(collection(dbI(), "products")); // admin: every product, any source
+      seen = new Set(old.docs.map((d) => d.get("sourceId") as string).filter(Boolean));
+      names = new Set(old.docs.map((d) => norm(String(d.get("name") || ""))).filter(Boolean));
+    } catch { /* best effort */ }
     const host = new URL(b).host;
     setRows(uniq.map((p) => {
       const key = `${host}:${p.id}`;
       const moq = String(Math.max(1, Number(p.minimum_order_qty) || Number(p.min_qty) || 1));
-      return { key, src: p, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !seen.has(key), state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : "" };
+      const dup = seen.has(key) || names.has(norm(p.name || ""));
+      return { key, src: p, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !dup, state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : dup ? "فيه منتج عندك بنفس الاسم — علّمه لو مختلف" : "" };
     }));
-    setSrcCats(categories);
+    setSrcCats(flatCats(categories));
     // auto-match categories by name
     const ours = cats.data ?? [];
     const m: Record<string, string> = {};
@@ -84,7 +116,8 @@ export default function ImportSite() {
       m[id] = ours.find((c) => name && norm(c.name) === norm(name))?.id || (name ? "new" : "");
     }
     setMap(m);
-    setMsg(`اتلقى ${uniq.length} منتج`);
+    const fresh = uniq.filter((p) => !seen.has(`${host}:${p.id}`) && !names.has(norm(p.name || ""))).length;
+    setMsg(`اتلقى ${uniq.length} منتج — منهم ${fresh} جديد و ${uniq.length - fresh} موجودين عندك قبل كده`);
   };
 
   const fetchAll = async () => {
@@ -100,6 +133,13 @@ export default function ImportSite() {
         const r = await api(`products/latest?limit=100&offset=${page}`);
         if (!r.products?.length) break;
         products = products.concat(r.products);
+      }
+      // "latest" can skip some items: also read every category (and sub-category) directly
+      const all = flatCats(categories);
+      for (let k = 0; k < all.length; k += 4) {
+        setMsg(`جاري الجلب من الأقسام… ${Math.min(k + 4, all.length)} من ${all.length} (${new Set(products.map((p) => p.id)).size} منتج لحد دلوقتي)`);
+        const res = await Promise.all(all.slice(k, k + 4).map((c) => api(`categories/products/${c.id}`).catch(() => [])));
+        for (const r of res) { const list = Array.isArray(r) ? r : r?.products; if (Array.isArray(list)) products = products.concat(list); }
       }
       await accept(products, categories);
     } catch {
@@ -185,7 +225,19 @@ export default function ImportSite() {
       <div className="card col">
         <h3>استيراد منتجات من موقع تاجر</h3>
         <small>للمواقع المبنية على نظام 6valley (زي alwazeers.com). بيجيب الاسم والسعر بعد الخصم وأقل كمية والصور والوصف والألوان والمقاسات.</small>
+        {sources.length > 0 && (
+          <div className="row wrap g8">
+            <b>المصادر المحفوظة:</b>
+            {sources.map((s) => (
+              <span key={s.url} className={`chip${cleanUrl(s.url) === cleanUrl(base) ? " on" : ""}`} onClick={() => pickSource(s.url)} title={s.url}>
+                <i className="ph ph-link" />{s.name}
+                <button className="cx" aria-label="حذف" onClick={(e) => { e.stopPropagation(); if (confirm(`حذف "${s.name}" من المصادر؟`)) saveSources(sources.filter((x) => x.url !== s.url)); }}><i className="ph ph-x" /></button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="row wrap">
+          <button className="btn o" onClick={addSource}><i className="ph ph-floppy-disk" />{currentSrc ? "تعديل الاسم" : "حفظ اللينك"}</button>
           <input className="in sp" style={{ direction: "ltr", minWidth: 220 }} value={base} onChange={(e) => setBase(e.target.value)} />
           <button className="btn" disabled={loading} onClick={fetchAll}>{loading ? "جاري الجلب…" : "جلب المنتجات"}</button>
         </div>
@@ -197,7 +249,8 @@ export default function ImportSite() {
             <li>افتح الرابط ده في المتصفح، واحفظ الصفحة (Ctrl+S) باسم <b>p1.json</b>: <a href={ex} target="_blank" rel="noreferrer" style={{ direction: "ltr", display: "inline-block", color: "var(--pm)", wordBreak: "break-all" }}>{ex}</a></li>
             <li>لو المنتجات أكتر من 100، غيّر <b>offset=1</b> لـ 2 ثم 3… واحفظ كل صفحة (p2.json, p3.json…).</li>
             <li>واحفظ الأقسام من: <a href={`${b}/api/v1/categories?guest_id=1`} target="_blank" rel="noreferrer" style={{ direction: "ltr", display: "inline-block", color: "var(--pm)" }}>{`${b}/api/v1/categories?guest_id=1`}</a> باسم cats.json</li>
-            <li>اختار كل الملفات مرة واحدة هنا:</li>
+            <li>علشان مايفوتش أي منتج: لكل قسم افتح <span style={{ direction: "ltr", display: "inline-block" }}>{`${b}/api/v1/categories/products/رقم_القسم?guest_id=1`}</span> واحفظه (رقم القسم موجود في cats.json).</li>
+            <li>اختار كل الملفات مرة واحدة هنا (المكرر بيتشال لوحده):</li>
           </ol>
           <input type="file" accept=".json,application/json" multiple onChange={(e) => fromFiles(e.target.files)} />
         </details>
@@ -251,7 +304,7 @@ export default function ImportSite() {
                   {/شريح/.test(r.name) && !r.pack && <small style={{ color: "var(--warn)" }}>⚠ الاسم فيه "شريحة": اكتب عدد القطع في الشريحة علشان السعر يتحسب صح.</small>}
                   <small>سعرهم {r.base} ج.م{packOf(r) > 1 ? ` للقطعة × ${packOf(r)} = ${unitBase(r)} للشريحة` : ""} · {r.edited ? `سعر مخصوص من ${r.moq || 1} قطعة` : `عندك: ${tiersText(unitBase(r))}${packOf(r) > 1 ? " للشريحة" : ""}`} · {catName(r.cat)} · {r.imgs.length} صورة{r.src.published === 0 ? " · مش منشور عندهم" : ""}{Number(r.src.discount) > 0 ? ` · السعر قبل الخصم ${r.src.unit_price}` : ""}</small>
                 </div>
-                {r.state === "ok" ? <span className="bd v">{r.note || "اتضاف"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : null}
+                {r.state === "ok" ? <span className="bd v">{r.note || "اتضاف"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : r.note ? <span className="bd w">{r.note}</span> : null}
               </div>
             ))}
           </div>
