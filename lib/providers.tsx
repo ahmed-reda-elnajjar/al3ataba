@@ -5,6 +5,7 @@ import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { authI, dbI } from "./firebase";
 import { ADMIN_EMAILS, DEFAULT_SETTINGS } from "./config";
 import { getSettings } from "./store";
+import { attachUser } from "./reco";
 import type { CartItem, Merchant, Settings } from "./types";
 
 type Ctx = {
@@ -70,6 +71,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     if (!loggedIn || !user) { setMerchant(null); return; }
     return onSnapshot(doc(dbI(), "merchants", user.uid), (s) => setMerchant(s.exists() ? ({ id: s.id, ...s.data() } as Merchant) : null), () => setMerchant(null));
   }, [loggedIn, user]);
+
+  useEffect(() => { attachUser(loggedIn && user ? user.uid : null); }, [loggedIn, user]);
 
   const save = useCallback((next: CartItem[]) => {
     setItems(next);

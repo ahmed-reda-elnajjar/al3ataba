@@ -6,6 +6,7 @@ import { useApp } from "@/lib/providers";
 import { listApprovedMerchants, listCategories, pageActiveProducts } from "@/lib/store";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { Skyline } from "@/components/Brand";
+import { Recommended } from "@/components/Recommend";
 import { sized } from "@/lib/media";
 
 export default function Home() {
@@ -56,6 +57,8 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      <Recommended />
 
       {/* products */}
       <section className="sec">

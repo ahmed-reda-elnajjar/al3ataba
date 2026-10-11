@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { allActiveProductsCached, listCategories } from "@/lib/store";
 import { rangeText } from "@/lib/pricing";
 import { sized } from "@/lib/media";
+import { track } from "@/lib/reco";
 import type { Category, Product } from "@/lib/types";
 
 // Normalise Arabic so "أ/إ/ا", "ة/ه", "ى/ي" and diacritics match each other.
@@ -45,7 +46,7 @@ export function SearchBox({ className, style }: { className: string; style?: Rea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, q]);
 
-  const go = (text = q) => { setOpen(false); const t = text.trim(); router.push(t ? `/search?q=${encodeURIComponent(t)}` : "/search"); };
+  const go = (text = q) => { setOpen(false); const t = text.trim(); if (t) track("search", t); router.push(t ? `/search?q=${encodeURIComponent(t)}` : "/search"); };
   const items = [...res.words.map((w) => ({ k: "w" + w, href: "", word: [...q.trim().split(/\s+/).slice(0, -1), w].join(" ") })), ...res.cats.map((c) => ({ k: "c" + c.id, href: `/search?cat=${c.id}`, word: "" })), ...res.products.map((p) => ({ k: "p" + p.id, href: `/product/${p.id}`, word: "" }))];
   const pickIdx = (i: number) => { const it = items[i]; if (!it) return go(); if (it.word) { setQ(it.word); go(it.word); } else { setOpen(false); router.push(it.href); } };
   const show = open && q.trim().length > 0;

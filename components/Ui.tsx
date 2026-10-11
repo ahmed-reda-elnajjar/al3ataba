@@ -6,6 +6,7 @@ import { useApp } from "@/lib/providers";
 import { useFavs } from "@/lib/favs";
 import { isVideoUrl, videoPoster } from "@/lib/img";
 import { sized } from "@/lib/media";
+import { track } from "@/lib/reco";
 
 export function Img({ src, ic = "ph-image", ratio = 1, className = "", style, w = 600 }: { src?: string; ic?: string; ratio?: number; className?: string; style?: React.CSSProperties; w?: number }) {
   return (
@@ -19,12 +20,12 @@ export function ProductCard({ p, verified }: { p: Product; verified?: boolean })
   const { add, items } = useApp();
   const favs = useFavs();
   const inCart = items.some((i) => i.productId === p.id);
-  const quick = () => add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: p.moq, price: priceFor(p.tiers, p.moq), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod });
+  const quick = () => { track("cart", p); add({ id: p.id, productId: p.id, name: p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: p.moq, price: priceFor(p.tiers, p.moq), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod }); };
   const fav = favs.has(p.id);
   const coverVideo = p.media?.[0] && isVideoUrl(p.media[0]) ? p.media[0] : "";
   return (
     <div className="pc">
-      <button className={`ico fav${fav ? " on" : ""}`} aria-label="المفضلة" onClick={() => favs.toggle(p.id)}><i className={`ph${fav ? "-fill" : ""} ph-heart`} /></button>
+      <button className={`ico fav${fav ? " on" : ""}`} aria-label="المفضلة" onClick={() => { if (!fav) track("fav", p); favs.toggle(p.id); }}><i className={`ph${fav ? "-fill" : ""} ph-heart`} /></button>
       <Link href={`/product/${p.id}`} style={{ position: "relative", display: "block" }}>
         <Img src={coverVideo ? videoPoster(coverVideo) : p.images?.[0]} ic="ph-package" ratio={1} w={420} />
         {coverVideo && <span className="vbadge"><i className="ph ph-play" /></span>}

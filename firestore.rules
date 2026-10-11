@@ -55,6 +55,11 @@ service cloud.firestore {
     }
 
     // ---- carts ----
+    // each shopper's interests for "مقترح لك" (only the owner can read/write)
+    match /profiles/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
     // internal suppliers list: admins only (customers never see supplier names)
     match /suppliers/{id} {
       allow read, write: if isAdmin();

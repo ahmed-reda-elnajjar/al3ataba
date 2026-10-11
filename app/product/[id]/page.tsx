@@ -12,6 +12,8 @@ import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { HOUSE } from "@/lib/config";
 import { useFavs } from "@/lib/favs";
 import { Gallery } from "@/components/Gallery";
+import { Recommended } from "@/components/Recommend";
+import { track } from "@/lib/reco";
 import { swatch } from "@/lib/colors";
 
 export default function ProductPage() {
@@ -29,6 +31,7 @@ export default function ProductPage() {
   const [qty, setQty] = useState(0);
   const [color, setColor] = useState("");
   useEffect(() => { if (p) { setQty(p.moq); setColor(p.colors?.[0] || ""); } }, [p]);
+  useEffect(() => { if (p) track("view", p); }, [p]);
   useEffect(() => { if (p) document.title = `${p.name} | العتبة`; }, [p]);
 
   if (loading) return <div className="wc"><Loading rows={2} /></div>;
@@ -39,6 +42,7 @@ export default function ProductPage() {
   const cartId = color ? `${p.id}:${color}` : p.id;
   const inCart = items.some((i) => i.id === cartId);
   const addToCart = () => {
+    track("cart", p);
     add({ id: cartId, productId: p.id, name: color ? `${p.name} (${color})` : p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: q, price: priceFor(p.tiers, q), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod });
     router.push("/cart");
   };
@@ -50,7 +54,7 @@ export default function ProductPage() {
       <small><Link href="/">الرئيسية</Link> › <Link href={`/search?cat=${p.categoryId}`}>{p.categoryName}</Link></small>
       <div className="grid mt" style={st("--m:1;--d:2;align-items:start;gap:28px")}>
         <Gallery images={p.images ?? []} videos={p.videos ?? []} order={p.media}>
-          <button className={`ico${favs.has(p.id) ? " on" : ""}`} style={{ position: "absolute", top: 12, insetInlineEnd: 12, zIndex: 3, width: 42, height: 42 }} onClick={() => favs.toggle(p.id)} aria-label="المفضلة"><i className={`ph${favs.has(p.id) ? "-fill" : ""} ph-heart`} /></button>
+          <button className={`ico${favs.has(p.id) ? " on" : ""}`} style={{ position: "absolute", top: 12, insetInlineEnd: 12, zIndex: 3, width: 42, height: 42 }} onClick={() => { if (!favs.has(p.id)) track("fav", p); favs.toggle(p.id); }} aria-label="المفضلة"><i className={`ph${favs.has(p.id) ? "-fill" : ""} ph-heart`} /></button>
         </Gallery>
         <div className="col">
           <div className="row g8 wrap">
@@ -103,6 +107,7 @@ export default function ProductPage() {
         {p.specs?.length > 0 && <div className="card col"><h3>المواصفات</h3><table className="tbl"><tbody>{p.specs.map((s, i) => <tr key={i}><td>{s.k}</td><td>{s.v}</td></tr>)}</tbody></table></div>}
       </div>
       {(data?.similar.length ?? 0) > 0 && <div className="sec mt2"><h2>منتجات مشابهة</h2><div className="grid" style={st("--m:2;--d:4")}>{data!.similar.map((x) => <ProductCard key={x.id} p={x} />)}</div></div>}
+      <div className="mt2"><Recommended title="ممكن يعجبك كمان" exclude={[p.id, ...(data?.similar ?? []).map((x) => x.id)]} boostCat={p.categoryId} n={8} cols={4} /></div>
     </div>
   );
 }
