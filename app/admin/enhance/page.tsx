@@ -8,7 +8,7 @@ import { useApp } from "@/lib/providers";
 import { withId } from "@/lib/store";
 import { sized } from "@/lib/media";
 import { norm } from "@/components/SearchBox";
-import { applyStudio, enhanceMany, isStudio, restoreImagesMany, studioPreview, undoEnhance, type StudioResult, type Step } from "@/lib/enhance";
+import { applyStudio, editWithPrompt, enhanceMany, isStudio, restoreImagesMany, studioPreview, undoEnhance, type StudioResult, type Step } from "@/lib/enhance";
 import type { Product } from "@/lib/types";
 
 type Prev = { state: "busy" | "ready" | "err" | "saved" | "skip"; res?: StudioResult; error?: string };
@@ -61,6 +61,30 @@ export default function EnhancePage() {
     setPrev((o) => ({ ...o, [p.id]: { state: "busy" } }));
     try { const res = await studioPreview(user, src, "extract", `${p.name} ${p.categoryName}`, variant, prompt, bg, hand); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
     catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
+  };
+  // free-text edits on a preview ("شيل الإيد", "كبّر المنتج", "خلي الخلفية رمادي فاتح"…), with undo
+  const [ask, setAsk] = useState<Record<string, string>>({});
+  const [hist, setHist] = useState<Record<string, string[]>>({});
+  const [engine, setEngine] = useState<"auto" | "gemini">("auto");
+  const [editing, setEditing] = useState<Record<string, string>>({});
+  const edit = async (p: Product) => {
+    const pr = prev[p.id]; const text = (ask[p.id] || "").trim();
+    if (!user || !pr?.res || !text) return;
+    setEditing((o) => ({ ...o, [p.id]: "جاري التعديل…" }));
+    try {
+      const r = await editWithPrompt(user, pr.res.image, text, engine);
+      setHist((h) => ({ ...h, [p.id]: [...(h[p.id] || []), pr.res!.image] }));
+      setPrev((o) => ({ ...o, [p.id]: { state: "ready", res: { ...pr.res!, image: r.image, cut: "" } } }));
+      setAsk((a) => ({ ...a, [p.id]: "" }));
+      setEditing((o) => ({ ...o, [p.id]: r.note ? `✓ ${r.note}${r.by ? ` (${r.by})` : ""}` : "✓ اتعدلت" }));
+    } catch (e) { setEditing((o) => ({ ...o, [p.id]: `✗ ${String((e as Error).message)}` })); }
+  };
+  const undoEdit = (p: Product) => {
+    const h = hist[p.id] || []; const last = h[h.length - 1]; const pr = prev[p.id];
+    if (!last || !pr?.res) return;
+    setHist((o) => ({ ...o, [p.id]: h.slice(0, -1) }));
+    setPrev((o) => ({ ...o, [p.id]: { state: "ready", res: { ...pr.res!, image: last } } }));
+    setEditing((o) => ({ ...o, [p.id]: "اترجعت للنسخة اللي قبلها" }));
   };
   const approve = async (p: Product) => {
     const pr = prev[p.id]; if (!pr?.res) return;
@@ -155,7 +179,10 @@ export default function EnhancePage() {
       {/* studio previews */}
       {previews.length > 0 && (
         <div className="card col" style={{ gap: 10, borderColor: "var(--gold)" }}>
-          <div className="row wrap"><b className="sp">معاينة صور الاستوديو</b>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
+          <div className="row wrap g8"><b className="sp">معاينة صور الاستوديو</b>
+            <small className="mu">التعديل بالكلام:</small>
+            <button className={`chip${engine === "auto" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("auto")}>ذكاء اصطناعي ببلاش</button>
+            <button className={`chip${engine === "gemini" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("gemini")}>Gemini صور (مدفوع)</button>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
           <small className="mu">بص على كل صورة: لو المنتج اتغيّر أو حاجة ناقصة دوس "ارفض". مفيش حاجة بتتحفظ غير لما تعتمد. لما تعتمد، الصورة الجديدة بتبقى الصورة الرئيسية والصور الأصلية بتفضل موجودة بعدها في المعرض.</small>
           <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 2, gap: 12 }}>
             {previews.map((p) => { const pr = prev[p.id]; return (
@@ -176,6 +203,16 @@ export default function EnhancePage() {
                     <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "auto", "", true)}>شيل الإيد/الصباع وكمّل المنتج</button>
                     <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => { const w = prompt("اكتب بالإنجليزي اللي عايز يتقص (مثال: black wireless earbuds and case):", pr.res?.cut || ""); if (w) retry(p, "auto", w); }}>كلمات مخصوصة…</button>
                     {pr.res?.cut && <small className="mu" style={{ width: "100%" }}>اتقص: {pr.res.cut}</small>}
+                  </div>
+                )}
+                {pr.res && pr.state === "ready" && (
+                  <div className="col g4">
+                    <div className="row g4">
+                      <input className="in sp" style={{ minHeight: 38, fontSize: 14 }} placeholder="اكتب التعديل… مثال: شيل الإيد وكمّل العلبة، كبّر المنتج، خلي الخلفية رمادي فاتح" value={ask[p.id] || ""} onChange={(e) => setAsk((a) => ({ ...a, [p.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") edit(p); }} disabled={editing[p.id] === "جاري التعديل…"} />
+                      <button className="btn sm2" disabled={!(ask[p.id] || "").trim() || editing[p.id] === "جاري التعديل…"} onClick={() => edit(p)}><i className="ph ph-magic-wand" />عدّل</button>
+                      {(hist[p.id]?.length ?? 0) > 0 && <button className="btn o sm2" onClick={() => undoEdit(p)} title="رجوع للنسخة اللي قبلها"><i className="ph ph-arrow-counter-clockwise" /></button>}
+                    </div>
+                    {editing[p.id] && <small style={{ color: editing[p.id].startsWith("✗") ? "var(--err)" : undefined }}>{editing[p.id]}</small>}
                   </div>
                 )}
                 {pr.res && pr.res.specs.length > 0 && <small><b>اتقري من الصورة:</b> {pr.res.specs.map((s) => `${s.k}: ${s.v}`).join(" · ")}</small>}

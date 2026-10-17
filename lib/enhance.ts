@@ -195,3 +195,11 @@ export async function applyStudio(p: Product, res: StudioResult) {
   await updateDoc(doc(dbI(), "products", p.id), f);
   return f;
 }
+
+/** Edit a preview with a free-text instruction (Arabic ok). */
+export async function editWithPrompt(user: User, url: string, instruction: string, engine: "auto" | "gemini" = "auto") {
+  const r = await fetch("/api/ai-edit", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, instruction, engine }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j as { image: string; note?: string; by?: string };
+}
