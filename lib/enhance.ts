@@ -1,20 +1,23 @@
 "use client";
 /* Product polish: studio photos (background removed → clean white square, sharper, better quality)
  * and professional AI copy. Originals are always kept (imagesOrig / nameOrig / descriptionOrig) so it can be undone. */
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, writeBatch } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { dbI } from "./firebase";
 import { uploadFromUrl } from "./img";
 import type { Product } from "./types";
 
 const CLOUD = "res.cloudinary.com/dvefx5ts8/";
-const STUDIO = "e_background_removal/c_pad,w_1200,h_1200,b_rgb:FFFFFF/e_improve/e_sharpen:60/q_auto:best/f_jpg";
+// "clean": square on white + clearer + better quality, the picture itself is untouched (safe for designed/branded images)
+const CLEAN = "c_pad,w_1200,h_1200,b_rgb:FFFFFF/e_improve/e_sharpen:50/q_auto:best/f_jpg";
+// "cutout": also removes the background — only good for plain photos; it smears text/graphics on designed images
+const CUTOUT = "e_background_removal/" + CLEAN;
 export const isStudio = (u: string) => u.includes("/al3ataba/studio/");
 const isVideo = (u: string) => u.includes("/video/upload/");
 
 /** Cloudinary URL that renders the studio version of an uploaded image. */
-export function studioSource(url: string) {
-  return url.replace(/\/image\/upload\/(?:[^/]+\/)*?(v\d+\/)/, `/image/upload/${STUDIO}/$1`);
+export function studioSource(url: string, cutout = false) {
+  return url.replace(/\/image\/upload\/(?:[^/]+\/)*?(v\d+\/)/, `/image/upload/${cutout ? CUTOUT : CLEAN}/$1`);
 }
 
 async function warm(url: string, tries = 4) {
@@ -30,25 +33,25 @@ async function warm(url: string, tries = 4) {
 }
 
 /** One image → studio image stored as its own Cloudinary asset (so resizing later costs nothing extra). */
-export async function enhanceImage(url: string): Promise<string> {
+export async function enhanceImage(url: string, cutout = false): Promise<string> {
   if (!url || isStudio(url) || isVideo(url)) return url;
   let src = url;
   if (!src.includes(CLOUD) || !/\/v\d+\//.test(src)) src = await uploadFromUrl(src); // data: URLs, other hosts → copy to our cloud first
-  const s = studioSource(src);
+  const s = studioSource(src, cutout);
   await warm(s);                                 // first call does the heavy work (≈10–30s)
   return uploadFromUrl(s, "al3ataba/studio");    // bake the result into a new image
 }
 
-export type Opts = { images: "none" | "cover" | "all"; text: boolean; names: boolean };
+export type Opts = { images: "none" | "cover" | "all"; text: boolean; names: boolean; cutout?: boolean };
 export type Step = { id: string; name: string; ok: boolean; note: string; before?: string; after?: string };
 
 /** Studio photos for one product. Returns the fields to save (or null if nothing changed). */
-export async function enhanceProductImages(p: Product, which: "cover" | "all") {
+export async function enhanceProductImages(p: Product, which: "cover" | "all", cutout = false) {
   const imgs = p.images || [];
   const targets = (which === "cover" ? imgs.slice(0, 1) : imgs).filter((u) => !isStudio(u) && !isVideo(u));
   if (!targets.length) return null;
   const map: Record<string, string> = {};
-  for (const u of targets) map[u] = await enhanceImage(u);
+  for (const u of targets) map[u] = await enhanceImage(u, cutout);
   const swap = (u: string) => map[u] || u;
   return {
     images: imgs.map(swap),
@@ -129,7 +132,7 @@ export async function enhanceMany(user: User, products: Product[], o: Opts, onSt
         const p = queue.shift()!;
         try {
           const before = p.images?.[0];
-          const f = await enhanceProductImages(p, o.images as "cover" | "all");
+          const f = await enhanceProductImages(p, o.images as "cover" | "all", !!o.cutout);
           if (!f) { onStep({ id: p.id, name: p.name, ok: true, note: "الصور متحسنة قبل كده" }); continue; }
           await updateDoc(doc(dbI(), "products", p.id), { ...f, reviewed: false });
           Object.assign(p, f);
@@ -149,5 +152,46 @@ export async function undoEnhance(p: Product, what: "images" | "text") {
   if (what === "images" && p.imagesOrig) Object.assign(f, { images: p.imagesOrig, ...(p.mediaOrig ? { media: p.mediaOrig } : {}), studio: false });
   if (what === "text" && p.nameOrig !== undefined) Object.assign(f, { name: p.nameOrig, description: p.descriptionOrig || "", aiCopy: false });
   if (Object.keys(f).length) await updateDoc(doc(dbI(), "products", p.id), f);
+  return f;
+}
+
+/** Put back the original photos of many products at once (e.g. after a bad background removal). */
+export async function restoreImagesMany(list: Product[], onDone?: (n: number) => void) {
+  let n = 0;
+  for (let i = 0; i < list.length; i += 400) {
+    const b = writeBatch(dbI());
+    for (const p of list.slice(i, i + 400)) {
+      if (!p.imagesOrig?.length) continue;
+      b.update(doc(dbI(), "products", p.id), { images: p.imagesOrig, ...(p.mediaOrig ? { media: p.mediaOrig } : {}), studio: false });
+      n++;
+    }
+    await b.commit();
+    onDone?.(n);
+  }
+  return n;
+}
+
+/* ---------- AI studio photo (preview first, then approve) ---------- */
+export type StudioResult = { image: string; method: "ai" | "studio"; specs: { k: string; v: string }[]; hasText: boolean };
+export async function studioPreview(user: User, url: string, mode: "auto" | "composite" = "auto"): Promise<StudioResult> {
+  const r = await fetch("/api/ai-image", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, mode }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j as StudioResult;
+}
+/** Save an approved studio photo as the cover + merge the specs read from the picture. */
+export async function applyStudio(p: Product, res: StudioResult) {
+  const imgs = p.images || [];
+  const old = imgs[0];
+  const images = [res.image, ...imgs.slice(1)];
+  const media = p.media?.length ? p.media.map((u) => (u === old ? res.image : u)) : undefined;
+  const have = new Set((p.specs || []).map((s) => s.k.trim()));
+  const specs = [...(p.specs || []), ...res.specs.filter((s) => !have.has(s.k.trim()))];
+  const f: Partial<Product> = {
+    images, ...(media ? { media } : {}), specs, studio: true, reviewed: false,
+    ...(res.specs.length ? { aiCopy: false } : {}), // new specs → the next description rewrite will use them
+    ...(p.imagesOrig ? {} : { imagesOrig: imgs, ...(p.media?.length ? { mediaOrig: p.media } : {}) }),
+  };
+  await updateDoc(doc(dbI(), "products", p.id), f);
   return f;
 }
