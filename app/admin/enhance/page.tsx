@@ -72,7 +72,8 @@ export default function EnhancePage() {
     if (!user || !pr?.res || !text) return;
     setEditing((o) => ({ ...o, [p.id]: "جاري التعديل…" }));
     try {
-      const r = await editWithPrompt(user, pr.res.image, text, engine);
+      const original = p.imagesOrig?.[0] || p.images?.find((u) => !isStudio(u)) || "";
+      const r = await editWithPrompt(user, pr.res.image, text, engine, original);
       setHist((h) => ({ ...h, [p.id]: [...(h[p.id] || []), pr.res!.image] }));
       setPrev((o) => ({ ...o, [p.id]: { state: "ready", res: { ...pr.res!, image: r.image, cut: "" } } }));
       setAsk((a) => ({ ...a, [p.id]: "" }));
@@ -158,7 +159,7 @@ export default function EnhancePage() {
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>صور استوديو:</b>
           <button className={`chip${mode === "extract" ? " on" : ""}`} onClick={() => setMode("extract")}>قص المنتج بالذكاء الاصطناعي (مُستحسن)</button>
-          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة تصوير من الأمام بـ Gemini (محتاج تفعيل الدفع)</button>
+          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة رسم بالذكاء الاصطناعي (Gemini / OpenRouter / Grok)</button>
         </div>
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>الخلفية:</b>
@@ -182,7 +183,7 @@ export default function EnhancePage() {
           <div className="row wrap g8"><b className="sp">معاينة صور الاستوديو</b>
             <small className="mu">التعديل بالكلام:</small>
             <button className={`chip${engine === "auto" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("auto")}>ذكاء اصطناعي ببلاش</button>
-            <button className={`chip${engine === "gemini" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("gemini")}>Gemini صور (مدفوع)</button>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
+            <button className={`chip${engine === "gemini" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("gemini")}>إعادة رسم (Gemini / OpenRouter / Grok)</button>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
           <small className="mu">بص على كل صورة: لو المنتج اتغيّر أو حاجة ناقصة دوس "ارفض". مفيش حاجة بتتحفظ غير لما تعتمد. لما تعتمد، الصورة الجديدة بتبقى الصورة الرئيسية والصور الأصلية بتفضل موجودة بعدها في المعرض.</small>
           <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 2, gap: 12 }}>
             {previews.map((p) => { const pr = prev[p.id]; return (
@@ -192,7 +193,7 @@ export default function EnhancePage() {
                   <figure style={{ margin: 0, flex: 1, textAlign: "center" }}><img src={sized(p.imagesOrig?.[0] || p.images?.[0], 400)} alt="قبل" style={{ width: "100%", aspectRatio: "1", objectFit: "contain", borderRadius: 10, background: "#fff" }} /><figcaption className="mu" style={{ fontSize: 12 }}>قبل</figcaption></figure>
                   <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
                     {pr.state === "busy" ? <div className="skel" style={{ width: "100%", aspectRatio: "1" }} /> : pr.res ? <img src={sized(pr.res.image, 400)} alt="بعد" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10 }} /> : <div className="alert e" style={{ aspectRatio: "1", display: "grid", placeItems: "center", fontSize: 13 }}>{pr.error}</div>}
-                    <figcaption className="mu" style={{ fontSize: 12 }}>بعد{pr.res ? (pr.res.method === "ai" ? " (Gemini)" : " (قص المنتج)") : ""}</figcaption>
+                    <figcaption className="mu" style={{ fontSize: 12 }}>بعد{pr.res ? (pr.res.method === "ai" ? " (إعادة رسم)" : " (قص المنتج)") : ""}</figcaption>
                   </figure>
                 </div>
                 {pr.state !== "busy" && pr.state !== "saved" && (

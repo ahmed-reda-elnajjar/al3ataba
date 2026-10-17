@@ -6,6 +6,7 @@
  * Nothing is saved here — the admin approves each result first. */
 import { isAdminToken } from "@/lib/serverAuth";
 import { sized } from "@/lib/media";
+import { redraw } from "@/lib/aiImage";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -75,24 +76,9 @@ Keep the physical product (and its packaging box if it is part of the product) E
 Remove every overlay that is not physically on the product: marketing text, icons, badges, banners, decorative graphics, watermarks, extra background objects.
 Place the product centered on a seamless pure white (#FFFFFF) background with even, diffused studio light and no harsh shadows. Square 1:1 framing, product filling about 70% of the frame, sharp and high detail. Output only the edited image.`;
 
-async function geminiImage(b64: string): Promise<string | null> {
-  const e = process.env;
-  if (!e.GEMINI_API_KEY) return null;
-  for (const model of Array.from(new Set([e.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image", "gemini-2.0-flash-preview-image-generation"]))) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${e.GEMINI_API_KEY}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: "image/jpeg", data: b64 } }, { text: STUDIO_PROMPT }] }], generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
-      });
-      const j = await r.json();
-      if (!r.ok) continue;
-      const part = (j?.candidates?.[0]?.content?.parts || []).find((p: { inlineData?: { data?: string }; inline_data?: { data?: string } }) => p.inlineData?.data || p.inline_data?.data);
-      const data = part?.inlineData?.data || part?.inline_data?.data;
-      const mime = part?.inlineData?.mimeType || part?.inline_data?.mime_type || "image/png";
-      if (data) return `data:${mime};base64,${data}`;
-    } catch { /* next model */ }
-  }
-  return null;
+async function geminiImage(b64: string): Promise<{ data: string; by: string } | { error: string }> {
+  try { const r = await redraw(b64, STUDIO_PROMPT); return { data: r.dataUrl, by: r.by }; }
+  catch (e) { return { error: String((e as Error).message) }; }
 }
 
 /* ---------- 2b) Cloudinary: extract just the product (AI), place it on the studio backdrop ---------- */
@@ -149,13 +135,13 @@ export async function POST(req: Request) {
     const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
     const [read, gen] = await Promise.all([readText(b64), mode === "gemini" ? geminiImage(b64) : Promise.resolve(null)]);
     let image = "", method = "";
-    if (gen) {
-      image = await upload(gen); method = "ai";
+    if (gen && "data" in gen) {
+      image = await upload(gen.data); method = "ai";
       // Gemini returns ~1024px: upscale ×4 for a high-definition packshot (keeps the first file if it fails)
       try { const up = image.replace("/upload/f_auto,q_auto:best/", "/upload/e_upscale/q_auto:best/f_jpg/"); if ((await fetch(up, { cache: "no-store" })).ok) image = await upload(up); } catch { /* keep */ }
     }
     else {
-      if (mode === "gemini") throw err("موديل الصور في Gemini مش متاح على مفتاحك (غالباً محتاج تفعيل الدفع في Google AI Studio). استخدم طريقة \"قص المنتج\".", 400);
+      if (mode === "gemini") throw err(`إعادة الرسم مش متاحة: ${gen && "error" in gen ? gen.error : ""}`, 400);
       // what to cut: custom words > chosen variant > the vision model's "subject" (whole item, box included when it's boxed) > guess
       const base = read.parts.length ? read.parts : guessParts(name || "");
       const custom = clean(prompt);

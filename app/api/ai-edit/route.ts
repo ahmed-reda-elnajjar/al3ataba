@@ -5,6 +5,7 @@
 import { isAdminToken } from "@/lib/serverAuth";
 import { aiGenerate } from "@/lib/ai";
 import { sized } from "@/lib/media";
+import { redraw } from "@/lib/aiImage";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -88,40 +89,32 @@ async function upload(file: string) {
 }
 
 async function geminiEdit(url: string, instr: string) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw err("GEMINI_API_KEY مش متضاف", 400);
   const img = await fetch(sized(url, 1024).replace("f_auto", "f_jpg"));
   const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
-  const text = `Edit this product photo exactly as requested, keep everything else (especially the product itself) unchanged, keep it a clean professional e-commerce photo. Request: ${instr}`;
-  let last = "";
-  for (const model of Array.from(new Set([process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image", "gemini-2.0-flash-preview-image-generation"]))) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: "image/jpeg", data: b64 } }, { text }] }], generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { last = j?.error?.message || `HTTP ${r.status}`; continue; }
-    const part = (j?.candidates?.[0]?.content?.parts || []).find((p: { inlineData?: { data?: string; mimeType?: string } }) => p.inlineData?.data) as { inlineData: { data: string; mimeType?: string } } | undefined;
-    if (part) return upload(`data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`);
-    last = "مارجعش صورة";
-  }
-  throw err(`Gemini: ${last} — غالباً محتاج تفعيل الدفع في Google AI Studio`, 400);
+  const r = await redraw(b64, `Edit this product photo exactly as requested, keep everything else (especially the product itself and its details) unchanged, keep it a clean professional e-commerce photo, high resolution. Request: ${instr}`);
+  return { image: await upload(r.dataUrl), by: r.by };
 }
 
 export async function POST(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const { url, instruction, engine } = (await req.json()) as { url: string; instruction: string; engine?: "auto" | "gemini" };
+  const { url, instruction, engine, original } = (await req.json()) as { url: string; instruction: string; engine?: "auto" | "gemini"; original?: string };
   const instr = String(instruction || "").trim().slice(0, 500);
   if (!url?.includes("res.cloudinary.com") || !instr) return Response.json({ error: "اكتب التعديل المطلوب" }, { status: 400 });
   try {
-    if (engine === "gemini") return Response.json({ image: await geminiEdit(url, instr), note: "اتعدلت بـ Gemini", by: "Gemini" });
+    if (engine === "gemini") { const g = await geminiEdit(original && /أمام|زاوية|front|angle/i.test(instr) ? original : url, instr); return Response.json({ image: g.image, note: `اتعدلت بإعادة الرسم`, by: g.by }); }
     const { out, provider } = await aiGenerate(PLAN(instr), parsePlan);
     const plan = out[0];
-    if (!plan?.ops?.length) return Response.json({ error: plan?.note || "مقدرتش أفهم التعديل ده — جرّب تكتبه بشكل أبسط", by: provider }, { status: 422 });
-    const target = build(url, plan.ops);
+    if (!plan?.ops?.length) {
+      // needs a real redraw (e.g. "from the front") → try the image models automatically
+      try { const g = await geminiEdit(original && /أمام|زاوية|front|angle/i.test(instr) ? original : url, instr); return Response.json({ image: g.image, note: "اتعدلت بإعادة الرسم", by: g.by }); }
+      catch (e) { return Response.json({ error: `${plan?.note || "التعديل ده محتاج إعادة رسم."} — ${String((e as Error).message)}`, by: provider }, { status: 422 }); }
+    }
+    // "keep only X" needs the original photo (the preview may only show the box, so X isn't there anymore)
+    const needsOriginal = plan.ops.some((o) => o.op === "keep_only") && original?.includes("res.cloudinary.com");
+    const target = build(needsOriginal ? original! : url, plan.ops);
     let ok = false, why = "";
     for (let i = 0; i < 4 && !ok; i++) { const w = await fetch(target, { cache: "no-store" }); ok = w.ok; why = w.headers.get("x-cld-error") || String(w.status); if (!ok) await new Promise((r) => setTimeout(r, 4000)); }
-    if (!ok) throw err(`Cloudinary: ${why}`);
+    if (!ok) throw err(/extract/i.test(why) ? `مالقيتش "${plan.ops.find((o) => o.op === "keep_only")?.what || "المنتج"}" في الصورة — جرّب اسم تاني (زي "المنتج بس" أو "كلمات مخصوصة")` : `Cloudinary: ${why}`, 422);
     return Response.json({ image: await upload(target), note: plan.note, ops: plan.ops, by: provider });
   } catch (e) {
     const x = e as Error & { status?: number };
