@@ -69,15 +69,42 @@ async function readText(b64: string): Promise<Read & { by: string }> {
   return { hasText: false, specs: [], parts: [], subject: "", boxed: false, hand: false, by: "" };
 }
 
-/* ---------- 2a) Gemini image model ---------- */
-const STUDIO_PROMPT = `Re-photograph this exact product as a premium e-commerce packshot: straight-on FRONT view (camera facing the front of the product at eye level, no tilt, no perspective angle), pure white background, ultra sharp, high resolution, crisp details.
-If a hand or fingers hold or cover the product or its box, remove them and faithfully reconstruct the hidden part.
-Keep the physical product (and its packaging box if it is part of the product) EXACTLY the same: same shape, colours, materials, connectors, buttons, logo printed on the product itself. Do not invent or change any part of the product.
-Remove every overlay that is not physically on the product: marketing text, icons, badges, banners, decorative graphics, watermarks, extra background objects.
-Place the product centered on a seamless pure white (#FFFFFF) background with even, diffused studio light and no harsh shadows. Square 1:1 framing, product filling about 70% of the frame, sharp and high detail. Output only the edited image.`;
+/* ---------- 2a) AI redraw (Meta / Gemini / OpenRouter / Grok) ---------- */
+// how a realistic catalogue photo of each kind of product should look
+const LOOK: [RegExp, string][] = [
+  [/كابل|وصلة|وصله|cable|usb|lightning|type.?c|micro/i, "It is a charging/data cable: show the WHOLE cable neatly coiled in a loose round loop (like a real product photo, the coil size suggesting its real length), with BOTH connector ends placed in front of the coil, facing the camera, so each connector's shape (USB-A, Type-C, Lightning, Micro-USB…) is clearly readable. Keep the cable's exact colour, material (braided or smooth) and connector housings."],
+  [/شاحن|راس|رأس|charger|adapter|adaptor|wall/i, "It is a charger: show the charger head from the front with its output ports (USB-A / USB-C) clearly visible and the plug prongs visible; if a cable comes with it, show the cable neatly coiled next to the head with its connector end visible."],
+  [/باور|power ?bank/i, "It is a power bank: show its front face straight on, with the display/LEDs and the input/output ports clearly visible (slightly show the port edge if needed). Keep its exact colour, finish and printed capacity."],
+  [/ايربود|ايربودز|earbud|air ?pod|tws/i, "It is a pair of wireless earbuds: show the charging case open, front view, with both earbuds placed in front of it."],
+  [/هاند ?فري|سماعة سلك|سماعه سلك|earphone/i, "It is wired earphones: show both earbuds in front with the cable neatly coiled behind them and the plug/connector clearly visible."],
+  [/هيد ?فون|سماعة رأس|سماعه راس|headphone|headset/i, "It is over-ear headphones: show them standing upright, front view, both ear cups visible."],
+  [/ساع|watch/i, "It is a smart watch: show the watch face straight on with the strap closed in a loop behind it, screen on."],
+  [/جراب|كفر|case|cover/i, "It is a phone case: show the back of the case straight on with the camera cut-out visible."],
+  [/سبيكر|صب|speaker/i, "It is a speaker: show its front grille straight on with the control buttons visible."],
+];
 
-async function geminiImage(b64: string): Promise<{ data: string; by: string } | { error: string }> {
-  try { const r = await redraw(b64, STUDIO_PROMPT); return { data: r.dataUrl, by: r.by }; }
+function buildPrompt(read: Read, name: string, variant: string, extra: string) {
+  const hay = `${name} ${read.subject} ${read.parts.join(" ")}`;
+  const look = LOOK.find(([re]) => re.test(hay))?.[1] || "Show the complete product, every part of it visible.";
+  const facts = read.specs.slice(0, 10).map((s) => `${s.k}: ${s.v}`).join("; ");
+  return [
+    "Turn this photo into a realistic, premium e-commerce catalogue photo of the SAME product.",
+    `Product: ${name}${read.subject ? ` (${read.subject})` : ""}.`,
+    facts ? `Facts read from its packaging (use them to get the product right, do not print them as text): ${facts}.` : "",
+    "First study the photo carefully and infer every real detail of the product: shape, colours, materials, connectors/ports, buttons, logos physically printed on it, length/size.",
+    look,
+    variant === "boxed" ? "Place its retail box standing upright behind/next to the product, box front facing the camera." : "Show ONLY the product itself, out of its packaging (no box, no blister, no card).",
+    "Camera: straight-on FRONT view at eye level, true-to-life proportions, realistic soft contact shadow under the product.",
+    "Background: seamless pure white (#FFFFFF), even diffused studio lighting.",
+    "Remove hands, fingers, marketing text, stickers, badges, watermarks and any other objects; reconstruct any hidden part faithfully.",
+    "Do NOT invent features, change colours or change the design. Ultra sharp, high resolution, square 1:1, product filling about 75% of the frame.",
+    extra ? `Extra instructions from the shop owner (follow them; they may be in Arabic): ${extra}` : "",
+    "Output only the final image.",
+  ].filter(Boolean).join("\n");
+}
+
+async function geminiImage(b64: string, prompt: string): Promise<{ data: string; by: string } | { error: string }> {
+  try { const r = await redraw(b64, prompt); return { data: r.dataUrl, by: r.by }; }
   catch (e) { return { error: String((e as Error).message) }; }
 }
 
@@ -133,7 +160,9 @@ export async function POST(req: Request) {
     const img = await fetch(sized(url, 1024).replace("f_auto", "f_jpg"));
     if (!img.ok) throw err(`مقدرتش أفتح الصورة (${img.status})`);
     const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
-    const [read, gen] = await Promise.all([readText(b64), mode === "gemini" ? geminiImage(b64) : Promise.resolve(null)]);
+    // redraw needs what's written on the product first, so it can draw the right connectors/ports
+    const read = await readText(b64);
+    const gen = mode === "gemini" ? await geminiImage(b64, buildPrompt(read, name || "", variant || "auto", clean(prompt))) : null;
     let image = "", method = "";
     if (gen && "data" in gen) {
       image = await upload(gen.data); method = "ai";

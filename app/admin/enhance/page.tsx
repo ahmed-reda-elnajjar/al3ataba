@@ -55,11 +55,11 @@ export default function EnhancePage() {
     await Promise.all([work(), work(), work()]);
     setRunning("");
   };
-  const retry = async (p: Product, variant: "auto" | "product" | "boxed", prompt = "", hand?: boolean) => {
+  const retry = async (p: Product, variant: "auto" | "product" | "boxed", prompt = "", hand?: boolean, how: "extract" | "gemini" = "extract") => {
     if (!user) return;
     const src = p.imagesOrig?.[0] || p.images!.find((u) => !isStudio(u)) || p.images![0];
     setPrev((o) => ({ ...o, [p.id]: { state: "busy" } }));
-    try { const res = await studioPreview(user, src, "extract", `${p.name} ${p.categoryName}`, variant, prompt, bg, hand); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
+    try { const res = await studioPreview(user, src, how, `${p.name} ${p.categoryName}`, variant, prompt, bg, hand); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
     catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
   };
   // free-text edits on a preview ("شيل الإيد", "كبّر المنتج", "خلي الخلفية رمادي فاتح"…), with undo
@@ -196,6 +196,14 @@ export default function EnhancePage() {
                     <figcaption className="mu" style={{ fontSize: 12 }}>بعد{pr.res ? (pr.res.method === "ai" ? " (إعادة رسم)" : " (قص المنتج)") : ""}</figcaption>
                   </figure>
                 </div>
+                {pr.state !== "busy" && pr.state !== "saved" && (
+                  <div className="row wrap g4" style={{ fontSize: 13 }}>
+                    <span className="mu">صورة احترافية واقعية:</span>
+                    <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "product", "", undefined, "gemini")}><i className="ph ph-magic-wand" /> المنتج كامل من الأمام</button>
+                    <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "boxed", "", undefined, "gemini")}>المنتج + العلبة</button>
+                    <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => { const w = window.prompt("اكتب اللي عايزه في الصورة (عربي أو إنجليزي). مثال: الكابل ملفوف والسوكتين باينين قدام، خلفية بيضاء"); if (w) retry(p, "product", w, undefined, "gemini"); }}>اكتب وصف…</button>
+                  </div>
+                )}
                 {pr.state !== "busy" && pr.state !== "saved" && (
                   <div className="row wrap g4" style={{ fontSize: 13 }}>
                     <span className="mu">ناقصة؟ جرّب:</span>
