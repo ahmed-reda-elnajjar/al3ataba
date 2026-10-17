@@ -12,6 +12,8 @@ export type Product = {
   cod: boolean; madeInEgypt: boolean; logoPrint: boolean;
   status: PStatus; keywords: string[]; createdAt?: { seconds: number };
   reviewed?: boolean; // admin checked every detail ("تم المراجعة")
+  studio?: boolean; imagesOrig?: string[]; mediaOrig?: string[]; // studio photos (originals kept for undo)
+  aiCopy?: boolean; nameOrig?: string; descriptionOrig?: string; // AI-rewritten copy (originals kept for undo)
   /* client-only: set by applyPromos() when a live offer covers this product */
   origTiers?: Tier[]; promo?: { id: string; title: string; label: string; color: string; min?: number; tiers?: Tier[] };
 };

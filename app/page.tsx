@@ -31,7 +31,7 @@ export default function Home() {
       {cats.length > 0 && (
         <div className="scr" style={{ gap: 14, marginBottom: 22 }}>
           {cats.map((c) => (
-            <Link key={c.id} href={`/search?cat=${c.id}`} className="cat">
+            <Link key={c.id} href={`/c/${c.id}`} className="cat">
               <span className="circ">{c.image ? <img src={sized(c.image, 160)} alt="" loading="lazy" /> : <i className={`ph ${c.icon}`} />}{offers.has(c.id) && <span className="cbadge">عرض</span>}</span>{c.name}
             </Link>
           ))}
@@ -44,7 +44,7 @@ export default function Home() {
           <div className="sec-h"><h2>أقسام رئيسية</h2><Link href="/categories">عرض الكل</Link></div>
           <Rail>
             {cats.map((c) => (
-              <Link key={c.id} href={`/search?cat=${c.id}`} className="tile">
+              <Link key={c.id} href={`/c/${c.id}`} className="tile">
                 <Img src={c.image} ic={c.icon} ratio={1} w={300} />
                 {offers.has(c.id) && <span className="pbadge"><i className="ph-fill ph-tag" />عرض</span>}
                 <span>{c.name}</span>

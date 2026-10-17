@@ -70,6 +70,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
                 <L href="/admin/import" ic="ph-telegram-logo" t="استيراد من تليجرام" />
                 <L href="/admin/categories" ic="ph-list-numbers" t="الأقسام وترتيبها" />
                 <L href="/admin/promos" ic="ph-tag" t="العروض والخصومات" />
+                <L href="/admin/enhance" ic="ph-magic-wand" t="تحسين الصور والأوصاف" />
                 <L href="/admin/orders" ic="ph-receipt" t="الطلبات" />
                 <L href="/admin/merchants" ic="ph-users-three" t="التجار" />
                 <L href="/admin/settings" ic="ph-gear" t="إعدادات الموقع" />
@@ -80,7 +81,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
         ) : (
           <nav className="col g4">
             <L href="/categories" ic="ph-squares-four" t="كل الأقسام" />
-            {(cats ?? []).map((c) => <L key={c.id} href={`/search?cat=${c.id}`} ic={c.icon || "ph-package"} t={c.name} img={c.image} />)}
+            {(cats ?? []).map((c) => <L key={c.id} href={`/c/${c.id}`} ic={c.icon || "ph-package"} t={c.name} img={c.image} />)}
             {cats && !cats.length && <small className="mu" style={{ padding: 12 }}>لسه مفيش أقسام.</small>}
             {isAdmin && <><div className="dr-sep" /><L href="/admin/categories" ic="ph-plus-circle" t="إضافة / حذف / ترتيب الأقسام" /></>}
           </nav>

@@ -28,7 +28,7 @@ export default function Categories() {
       {loading ? <div className="skel" /> : !list.length ? <Empty icon="ph-squares-four" title="مفيش أقسام" /> : (
         <div className="col" style={{ gap: 10 }}>
           {list.map((c) => (
-            <Link key={c.id} href={`/search?cat=${c.id}`} className="catrow">
+            <Link key={c.id} href={`/c/${c.id}`} className="catrow">
               <Img src={c.image} ic={c.icon} ratio={1} w={160} />
               <div className="sp">
                 <b style={{ fontSize: 16 }}>{c.name}</b>{offers.has(c.id) && <span className="bd" style={{ background: "#c0392b", color: "#fff", marginInlineStart: 6 }}><i className="ph-fill ph-tag" />عرض</span>}

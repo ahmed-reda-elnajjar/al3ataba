@@ -11,6 +11,7 @@ const MENU = [
   { href: "/admin/products?f=pending", t: "إدارة المنتجات ومراجعة المستورد", ic: "ph-package", k: "pendingProducts" },
   { href: "/admin/orders", t: "الطلبات", ic: "ph-receipt", k: "newOrders" },
   { href: "/admin/categories", t: "الأقسام وترتيبها", ic: "ph-list-numbers", k: "" },
+  { href: "/admin/enhance", t: "تحسين الصور والأوصاف (خلفية بيضا + وصف احترافي)", ic: "ph-magic-wand", k: "" },
   { href: "/admin/promos", t: "العروض والخصومات على الأقسام والمنتجات", ic: "ph-tag", k: "" },
   { href: "/admin/import", t: "استيراد منتجات من تليجرام", ic: "ph-telegram-logo", k: "" },
   { href: "/admin/import-site", t: "استيراد منتجات من موقع تاجر", ic: "ph-globe", k: "" },

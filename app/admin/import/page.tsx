@@ -1,8 +1,10 @@
 "use client";
 import { useMemo, useState } from "react";
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
+import { enhanceMany } from "@/lib/enhance";
+import type { Product } from "@/lib/types";
 import { useAsync } from "@/lib/hooks";
 import { listApprovedMerchants, listCategories } from "@/lib/store";
 import { uploadImage } from "@/lib/img";
@@ -68,6 +70,8 @@ export default function ImportTelegram() {
   const [moq, setMoq] = useState("1");
   const [owner, setOwner] = useState(HOUSE.id);
   const [running, setRunning] = useState(false);
+  const [autoPolish, setAutoPolish] = useState(true); // studio photo + professional copy right after import
+  const [polishMsg, setPolishMsg] = useState("");
   const [done, setDone] = useState(0);
 
   const findFile = (path: string) => {
@@ -117,6 +121,7 @@ export default function ImportTelegram() {
     const m = owner === HOUSE.id ? { id: HOUSE.id, name: HOUSE.name, governorate: "القاهرة" } : merchants.data?.find((x) => x.id === owner);
     if (!m) return setErr("اختار التاجر.");
     setErr(""); setRunning(true);
+    const newIds: string[] = [];
     for (const r of chosen) {
       const price = Number(digits(r.price));
       const q = Math.max(1, Number(digits(r.moq || moq)) || 1);
@@ -133,11 +138,18 @@ export default function ImportTelegram() {
           cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "telegram", sourceId: r.key, createdAt: serverTimestamp(),
-        });
+        }).then((ref) => { newIds.push(ref.id); });
         upd(r.key, { state: "ok" }); setDone((d) => d + 1);
       } catch { upd(r.key, { state: "err", note: images0(r) ? "فشل الحفظ" : "الصورة مش موجودة في المجلد" }); }
     }
     setRunning(false);
+    if (autoPolish && newIds.length) {
+      setPolishMsg(`جاري تحسين صور وأوصاف ${newIds.length} منتج… سيب الصفحة مفتوحة`);
+      const list = (await Promise.all(newIds.map((id) => getDoc(doc(dbI(), "products", id))))).filter((d) => d.exists()).map((d) => ({ id: d.id, ...d.data() }) as Product);
+      let okN = 0, badN = 0;
+      await enhanceMany(user, list, { images: "cover", text: true, names: true }, (st) => { if (st.ok) okN++; else badN++; setPolishMsg(`جاري التحسين… نجح ${okN} · فشل ${badN}`); }, () => false);
+      setPolishMsg(`خلص التحسين ✓ نجح ${okN} · فشل ${badN} — راجع المنتجات وانشرها`);
+    }
   };
   const images0 = (r: Row) => r.photos.some((p) => findFile(p));
 
@@ -167,6 +179,8 @@ export default function ImportTelegram() {
           </div>
           <div className="row wrap">
             <b className="sp">{rows.length} منتج اتلقى · {chosen.length} متعلّم · {done} اتضاف للمراجعة</b>
+              <label className="chk" title="شيل الخلفية + وصف احترافي بعد الاستيراد على طول"><input type="checkbox" checked={autoPolish} onChange={(e) => setAutoPolish(e.target.checked)} />حسّن الصور والوصف تلقائياً</label>
+              {polishMsg && <span className="ok" style={{ width: "100%" }}><i className="ph ph-magic-wand" /> {polishMsg}</span>}
               {done > 0 && !running && <a className="btn gd sm2" href="/admin/products?f=pending"><i className="ph ph-eye" />راجعهم وانشرهم</a>}
             <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => ({ ...r, on: true })))}>علّم الكل</button>
             <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => ({ ...r, on: false })))}>شيل الكل</button>

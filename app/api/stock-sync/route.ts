@@ -5,12 +5,11 @@
  * Needs env FIREBASE_SERVICE_ACCOUNT (the service-account JSON) set in Vercel — never in the code. */
 import { createSign } from "crypto";
 import { availability, fetchCatalogue } from "@/lib/stock";
-import { ADMIN_EMAILS } from "@/lib/config";
+import { isAdminToken } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const API_KEY = "AIzaSyCPXarDZxgfjpdxa6MJ8x6o2qlDcxZ-T6A"; // public web key (same as lib/firebase.ts)
 type SA = { project_id: string; client_email: string; private_key: string };
 type FsVal = { stringValue?: string; booleanValue?: boolean; integerValue?: string; arrayValue?: { values?: FsVal[] }; mapValue?: { fields?: Record<string, FsVal> } };
 
@@ -24,12 +23,6 @@ async function googleToken(sa: SA) {
   const j = await r.json();
   if (!j.access_token) throw new Error("service account login failed");
   return j.access_token as string;
-}
-
-async function isAdminToken(idToken: string) {
-  const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
-  const u = (await r.json())?.users?.[0];
-  return !!u && u.emailVerified === true && ADMIN_EMAILS.includes(String(u.email || "").toLowerCase());
 }
 
 export async function GET(req: Request) {

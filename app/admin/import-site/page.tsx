@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
+import { addDoc, collection, getDoc, doc, getDocs, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
+import { enhanceMany } from "@/lib/enhance";
 import { useAsync } from "@/lib/hooks";
 import { listApprovedMerchants, listCategories } from "@/lib/store";
 import { uploadFromUrl } from "@/lib/img";
@@ -13,7 +14,7 @@ import { createSupplier, listSuppliers } from "@/lib/suppliers";
 import { RulesEditor } from "@/components/Markup";
 import { StockSync } from "@/components/StockSync";
 import { availability } from "@/lib/stock";
-import type { Category } from "@/lib/types";
+import type { Category, Product } from "@/lib/types";
 
 /* Imports a partner's catalogue from a 6valley (6amTech) store — e.g. alwazeers.com — through its public API. */
 
@@ -69,6 +70,8 @@ export default function ImportSite() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
+  const [autoPolish, setAutoPolish] = useState(true); // studio photo + professional copy right after import
+  const [polishMsg, setPolishMsg] = useState("");
   const [done, setDone] = useState(0);
   const [onlyPublished, setOnlyPublished] = useState(false);
   const [hideOut, setHideOut] = useState(true);
@@ -223,6 +226,7 @@ export default function ImportSite() {
         const c = { id: ref.id, name, icon: ICONS[3], order: ours.length + 1 }; ours.push(c); resolved[id] = c;
       } else if (map[id]) { const c = ours.find((x) => x.id === map[id]); if (c) resolved[id] = c; }
     }
+    const newIds: string[] = [];
     for (const r of chosen) {
       const c = resolved[r.cat];
       const tiers = r.edited ? [{ min: Math.max(1, Number(r.moq) || 1), price: Number(r.price) }] : tiersOf(unitBase(r));
@@ -243,11 +247,18 @@ export default function ImportSite() {
           cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, supplierId: supplierId || null, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
-        });
+        }).then((ref) => { newIds.push(ref.id); });
         upd(r.key, { state: "ok", note: "" }); setDone((d) => d + 1);
       } catch { upd(r.key, { state: "err", note: "فشل الحفظ" }); }
     }
     setRunning(false);
+    if (autoPolish && newIds.length) {
+      setPolishMsg(`جاري تحسين صور وأوصاف ${newIds.length} منتج… سيب الصفحة مفتوحة`);
+      const list = (await Promise.all(newIds.map((id) => getDoc(doc(dbI(), "products", id))))).filter((d) => d.exists()).map((d) => ({ id: d.id, ...d.data() }) as Product);
+      let okN = 0, badN = 0;
+      await enhanceMany(user, list, { images: "cover", text: true, names: true }, (st) => { if (st.ok) okN++; else badN++; setPolishMsg(`جاري التحسين… نجح ${okN} · فشل ${badN}`); }, () => false);
+      setPolishMsg(`خلص التحسين ✓ نجح ${okN} · فشل ${badN} — راجع المنتجات وانشرها`);
+    }
   };
 
   const ex = `${b}/api/v1/products/latest?limit=100&offset=1&guest_id=1`;
@@ -329,6 +340,8 @@ export default function ImportSite() {
             <div className="col g8"><b>نسبة الزيادة حسب سعر القطعة والكمية</b><RulesEditor value={rules} onChange={setRules} /></div>
             <div className="row wrap">
               <b className="sp">{visible.length} منتج · {chosen.length} متعلّم · {done} اتضاف للمراجعة</b>
+              <label className="chk" title="شيل الخلفية + وصف احترافي بعد الاستيراد على طول"><input type="checkbox" checked={autoPolish} onChange={(e) => setAutoPolish(e.target.checked)} />حسّن الصور والوصف تلقائياً</label>
+              {polishMsg && <span className="ok" style={{ width: "100%" }}><i className="ph ph-magic-wand" /> {polishMsg}</span>}
               {done > 0 && !running && <a className="btn gd sm2" href="/admin/products?f=pending"><i className="ph ph-eye" />راجعهم وانشرهم</a>}
               <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => (r.state === "ok" ? r : { ...r, on: true })))}>علّم الكل</button>
               <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => ({ ...r, on: false })))}>شيل الكل</button>
