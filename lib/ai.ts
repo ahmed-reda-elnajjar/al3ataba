@@ -39,7 +39,9 @@ export function providers(): Provider[] {
   if (e.GEMINI_API_KEY) for (const m of Array.from(new Set([e.GEMINI_MODEL || "gemini-flash-lite-latest", "gemini-flash-latest"]))) list.push({ name: `Gemini (${m})`, run: (t) => geminiOne(m, t) });
   if (e.GROQ_API_KEY) list.push({ name: "Groq", run: (t) => openaiLike("https://api.groq.com/openai/v1/chat/completions", e.GROQ_API_KEY!, e.GROQ_MODEL || "llama-3.3-70b-versatile", t, "Groq") });
   if (e.XAI_API_KEY) list.push({ name: "Grok", run: (t) => openaiLike("https://api.x.ai/v1/chat/completions", e.XAI_API_KEY!, e.XAI_MODEL || "grok-3-mini", t, "Grok") });
-  if (e.LLAMA_API_KEY) list.push({ name: "Meta Llama", run: (t) => openaiLike("https://api.llama.com/compat/v1/chat/completions", e.LLAMA_API_KEY!, e.LLAMA_MODEL || "Llama-4-Maverick-17B-128E-Instruct-FP8", t, "Meta Llama") });
+  // Meta's old Llama API (api.llama.com) shut down in July 2026 — its successor is the Meta Model API (api.meta.ai, Muse models).
+  const metaKey = e.META_API_KEY || e.LLAMA_API_KEY;
+  if (metaKey) list.push({ name: "Meta", run: (t) => openaiLike("https://api.meta.ai/v1/chat/completions", metaKey, e.META_MODEL || e.LLAMA_MODEL || "muse-spark-1.3", t, "Meta") });
   if (e.OPENROUTER_API_KEY) list.push({ name: "OpenRouter", run: (t) => openaiLike("https://openrouter.ai/api/v1/chat/completions", e.OPENROUTER_API_KEY!, e.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free", t, "OpenRouter") });
   if (e.ANTHROPIC_API_KEY) list.push({ name: "Claude", run: claude });
   return list;

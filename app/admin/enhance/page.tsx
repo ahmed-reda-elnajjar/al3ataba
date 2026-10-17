@@ -159,7 +159,7 @@ export default function EnhancePage() {
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>صور استوديو:</b>
           <button className={`chip${mode === "extract" ? " on" : ""}`} onClick={() => setMode("extract")}>قص المنتج بالذكاء الاصطناعي (مُستحسن)</button>
-          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة رسم بالذكاء الاصطناعي (Gemini / OpenRouter / Grok)</button>
+          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة رسم بالذكاء الاصطناعي (Meta / Gemini / OpenRouter / Grok)</button>
         </div>
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>الخلفية:</b>
@@ -183,7 +183,7 @@ export default function EnhancePage() {
           <div className="row wrap g8"><b className="sp">معاينة صور الاستوديو</b>
             <small className="mu">التعديل بالكلام:</small>
             <button className={`chip${engine === "auto" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("auto")}>ذكاء اصطناعي ببلاش</button>
-            <button className={`chip${engine === "gemini" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("gemini")}>إعادة رسم (Gemini / OpenRouter / Grok)</button>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
+            <button className={`chip${engine === "gemini" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("gemini")}>إعادة رسم (Meta / Gemini / OpenRouter / Grok)</button>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
           <small className="mu">بص على كل صورة: لو المنتج اتغيّر أو حاجة ناقصة دوس "ارفض". مفيش حاجة بتتحفظ غير لما تعتمد. لما تعتمد، الصورة الجديدة بتبقى الصورة الرئيسية والصور الأصلية بتفضل موجودة بعدها في المعرض.</small>
           <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 2, gap: 12 }}>
             {previews.map((p) => { const pr = prev[p.id]; return (

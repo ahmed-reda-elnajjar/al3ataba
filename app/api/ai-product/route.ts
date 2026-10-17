@@ -46,7 +46,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
-  if (!providers().length) return Response.json({ error: "مفيش ولا مفتاح ذكاء اصطناعي متضاف في Vercel (GEMINI_API_KEY / GROQ_API_KEY / XAI_API_KEY / LLAMA_API_KEY)" }, { status: 500 });
+  if (!providers().length) return Response.json({ error: "مفيش ولا مفتاح ذكاء اصطناعي متضاف في Vercel (GEMINI_API_KEY / GROQ_API_KEY / XAI_API_KEY / META_API_KEY)" }, { status: 500 });
   const { items, names, prefer } = (await req.json()) as { items: In[]; names?: boolean; prefer?: string };
   if (!Array.isArray(items) || !items.length || items.length > 10) return Response.json({ error: "bad request" }, { status: 400 });
   try {
