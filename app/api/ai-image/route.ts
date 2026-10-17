@@ -25,9 +25,10 @@ const READ_PROMPT = `دي صورة منتج من متجر جملة. اقرأ أ�
 - "subject": وصف إنجليزي قصير (من 2 لـ 5 كلمات) للمنتج كقطعة واحدة زي ما هو ظاهر، من غير الخلفية والرسومات. لو المنتج ظاهر جوه علبته أو العلبة هي الأساس اكتب العلبة (مثال: "retail box with cable"، "wired earphones retail box"، "black over-ear headphones"، "portable bluetooth speaker").
 - "boxed": true لو المنتج الأساسي ظاهر جوه علبة أو العلبة واضحة جنبه، وإلا false.
 - "parts": كلمات إنجليزي للقطع الحقيقية للمنتج نفسه من غير العلبة (مثال: ["headphones"] أو ["cable","usb plug","connector"]).
-رجّع JSON فقط: {"hasText": true/false, "specs": [{"k":"...","v":"..."}], "subject": "...", "boxed": true/false, "parts": ["..."]}`;
+- "hand": true لو فيه إيد أو صباع أو جزء من شخص ماسك المنتج أو مغطي جزء منه، وإلا false.
+رجّع JSON فقط: {"hasText": true/false, "specs": [{"k":"...","v":"..."}], "subject": "...", "boxed": true/false, "parts": ["..."], "hand": true/false}`;
 
-type Read = { hasText: boolean; specs: Spec[]; parts: string[]; subject: string; boxed: boolean };
+type Read = { hasText: boolean; specs: Spec[]; parts: string[]; subject: string; boxed: boolean; hand: boolean };
 const clean = (x: unknown) => String(x || "").toLowerCase().replace(/[^a-z0-9 -]/g, " ").replace(/\s+/g, " ").trim();
 function parseSpecs(t: string): Read {
   try {
@@ -35,8 +36,8 @@ function parseSpecs(t: string): Read {
     const j = JSON.parse(m ? m[0] : t);
     const specs = (Array.isArray(j.specs) ? j.specs : []).filter((s: Spec) => s && s.k && s.v).map((s: Spec) => ({ k: String(s.k).trim().slice(0, 40), v: String(s.v).trim().slice(0, 120) })).slice(0, 12);
     const parts = (Array.isArray(j.parts) ? j.parts : []).map(clean).filter(Boolean).slice(0, 4);
-    return { hasText: !!j.hasText || specs.length > 0, specs, parts, subject: clean(j.subject).split(" ").slice(0, 6).join(" "), boxed: !!j.boxed };
-  } catch { return { hasText: false, specs: [], parts: [], subject: "", boxed: false }; }
+    return { hasText: !!j.hasText || specs.length > 0, specs, parts, subject: clean(j.subject).split(" ").slice(0, 6).join(" "), boxed: !!j.boxed, hand: !!j.hand };
+  } catch { return { hasText: false, specs: [], parts: [], subject: "", boxed: false, hand: false }; }
 }
 
 async function readText(b64: string): Promise<Read & { by: string }> {
@@ -64,14 +65,15 @@ async function readText(b64: string): Promise<Read & { by: string }> {
       if (r.ok) return { ...parseSpecs(String(j?.choices?.[0]?.message?.content || "")), by: "Groq" };
     } catch { /* ignore */ }
   }
-  return { hasText: false, specs: [], parts: [], subject: "", boxed: false, by: "" };
+  return { hasText: false, specs: [], parts: [], subject: "", boxed: false, hand: false, by: "" };
 }
 
 /* ---------- 2a) Gemini image model ---------- */
-const STUDIO_PROMPT = `Edit this product photo into a clean, premium e-commerce studio shot.
+const STUDIO_PROMPT = `Re-photograph this exact product as a premium e-commerce packshot: straight-on FRONT view (camera facing the front of the product at eye level, no tilt, no perspective angle), pure white background, ultra sharp, high resolution, crisp details.
+If a hand or fingers hold or cover the product or its box, remove them and faithfully reconstruct the hidden part.
 Keep the physical product (and its packaging box if it is part of the product) EXACTLY the same: same shape, colours, materials, connectors, buttons, logo printed on the product itself. Do not invent or change any part of the product.
 Remove every overlay that is not physically on the product: marketing text, icons, badges, banners, decorative graphics, watermarks, extra background objects.
-Place the product centered on a minimalist two-tone studio set: a soft warm off-white wall (#F3F0EA) in the upper part and a smooth warm beige tabletop (#F0DCC4) in the lower part, with a soft natural contact shadow under the product and gentle diffused light. Square 1:1 framing, product filling about 70% of the frame, sharp and high detail. Output only the edited image.`;
+Place the product centered on a seamless pure white (#FFFFFF) background with even, diffused studio light and no harsh shadows. Square 1:1 framing, product filling about 70% of the frame, sharp and high detail. Output only the edited image.`;
 
 async function geminiImage(b64: string): Promise<string | null> {
   const e = process.env;
@@ -112,13 +114,20 @@ const GUESS: [RegExp, string[]][] = [
 ];
 const guessParts = (text: string) => GUESS.find(([re]) => re.test(text))?.[1] || ["product"];
 
-function compositeUrl(src: string, parts: string[]) {
+/** bg "white": pure white, product centered with a light shadow · bg "studio": off-white wall + beige tabletop.
+ *  hand: first erase hands/fingers and let the AI rebuild the hidden part of the product/box. */
+function compositeUrl(src: string, parts: string[], o: { bg: "white" | "studio"; hand: boolean }) {
   const m = src.match(/res\.cloudinary\.com\/[^/]+\/image\/upload\/(?:[^/]+\/)*?v\d+\/(.+?)(\.[a-z0-9]+)?$/i);
   if (!m) return null;
   const id = m[1], ext = m[2] || ".jpg", layer = id.replace(/\//g, ":");
   const list = parts.map((p) => encodeURIComponent(p)).join(";");
   const prompt = parts.length > 1 ? `prompt_(${list});multiple_true` : `prompt_${list}`;
-  return `https://res.cloudinary.com/${CLD}/image/upload/c_scale,w_1200,h_1200/e_colorize:100,co_rgb:F3F0EA/l_${layer},c_scale,w_1200,h_520,e_colorize:100,co_rgb:F0DCC4/fl_layer_apply,g_south/l_${layer}/e_extract:${prompt}/e_trim/c_fit,w_900,h_800/e_shadow:35,x_0,y_16/fl_layer_apply,g_south,y_150/q_auto:best/f_jpg/${id}${ext}`;
+  const fix = o.hand ? "e_gen_remove:prompt_(hand;finger;fingers);multiple_true/" : "";
+  // high definition: clean compression artefacts (gen_restore) + AI upscale ×4 before cutting out
+  const cut = `l_${layer}/c_limit,w_900,h_900/${fix}e_gen_restore/e_upscale/e_extract:${prompt}/e_trim/e_sharpen:30`;
+  if (o.bg === "white") // pure white, no shadow, 2000×2000
+    return `https://res.cloudinary.com/${CLD}/image/upload/c_scale,w_2000,h_2000/e_colorize:100,co_rgb:FFFFFF/${cut}/c_fit,w_1500,h_1500/fl_layer_apply,g_center/q_auto:best/f_jpg/${id}${ext}`;
+  return `https://res.cloudinary.com/${CLD}/image/upload/c_scale,w_1200,h_1200/e_colorize:100,co_rgb:F3F0EA/l_${layer},c_scale,w_1200,h_520,e_colorize:100,co_rgb:F0DCC4/fl_layer_apply,g_south/${cut}/c_fit,w_900,h_800/e_shadow:35,x_0,y_16/fl_layer_apply,g_south,y_150/q_auto:best/f_jpg/${id}${ext}`;
 }
 
 async function upload(file: string) {
@@ -132,7 +141,7 @@ async function upload(file: string) {
 
 export async function POST(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const { url, mode, name, variant, prompt } = (await req.json()) as { url: string; mode?: "gemini" | "extract"; name?: string; variant?: "auto" | "product" | "boxed"; prompt?: string };
+  const { url, mode, name, variant, prompt, bg, hand } = (await req.json()) as { url: string; mode?: "gemini" | "extract"; name?: string; variant?: "auto" | "product" | "boxed"; prompt?: string; bg?: "white" | "studio"; hand?: boolean };
   if (!url || !url.includes("res.cloudinary.com")) return Response.json({ error: "الصورة لازم تكون على Cloudinary" }, { status: 400 });
   try {
     const img = await fetch(sized(url, 1024).replace("f_auto", "f_jpg"));
@@ -140,7 +149,11 @@ export async function POST(req: Request) {
     const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
     const [read, gen] = await Promise.all([readText(b64), mode === "gemini" ? geminiImage(b64) : Promise.resolve(null)]);
     let image = "", method = "";
-    if (gen) { image = await upload(gen); method = "ai"; }
+    if (gen) {
+      image = await upload(gen); method = "ai";
+      // Gemini returns ~1024px: upscale ×4 for a high-definition packshot (keeps the first file if it fails)
+      try { const up = image.replace("/upload/f_auto,q_auto:best/", "/upload/e_upscale/q_auto:best/f_jpg/"); if ((await fetch(up, { cache: "no-store" })).ok) image = await upload(up); } catch { /* keep */ }
+    }
     else {
       if (mode === "gemini") throw err("موديل الصور في Gemini مش متاح على مفتاحك (غالباً محتاج تفعيل الدفع في Google AI Studio). استخدم طريقة \"قص المنتج\".", 400);
       // what to cut: custom words > chosen variant > the vision model's "subject" (whole item, box included when it's boxed) > guess
@@ -150,7 +163,7 @@ export async function POST(req: Request) {
         : variant === "product" ? base
         : variant === "boxed" ? [`${base[0]} and retail box`]
         : read.subject ? [read.subject] : base;
-      const c = compositeUrl(url, what);
+      const c = compositeUrl(url, what, { bg: bg === "studio" ? "studio" : "white", hand: hand ?? read.hand });
       if (!c) throw err("الصورة مش بصيغة نقدر نعالجها");
       let ok = false, why = "";
       for (let i = 0; i < 4 && !ok; i++) { const w = await fetch(c, { cache: "no-store" }); ok = w.ok; why = w.headers.get("x-cld-error") || String(w.status); if (!ok) await new Promise((r) => setTimeout(r, 4000)); }

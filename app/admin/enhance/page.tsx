@@ -36,6 +36,7 @@ export default function EnhancePage() {
   // ---- studio photos (preview → approve)
   const [prev, setPrev] = useState<Record<string, Prev>>({});
   const [mode, setMode] = useState<"extract" | "gemini">("extract");
+  const [bg, setBg] = useState<"white" | "studio">("white");
   const stopRef = useRef(false);
   const [running, setRunning] = useState("");
   const runStudio = async () => {
@@ -47,18 +48,18 @@ export default function EnhancePage() {
       while (queue.length && !stopRef.current) {
         const p = queue.shift()!;
         const src = p.imagesOrig?.[0] || p.images!.find((u) => !isStudio(u)) || p.images![0]; // always start from the original photo
-        try { const res = await studioPreview(user, src, mode, `${p.name} ${p.categoryName}`); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
+        try { const res = await studioPreview(user, src, mode, `${p.name} ${p.categoryName}`, "auto", "", bg); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
         catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
       }
     };
     await Promise.all([work(), work(), work()]);
     setRunning("");
   };
-  const retry = async (p: Product, variant: "auto" | "product" | "boxed", prompt = "") => {
+  const retry = async (p: Product, variant: "auto" | "product" | "boxed", prompt = "", hand?: boolean) => {
     if (!user) return;
     const src = p.imagesOrig?.[0] || p.images!.find((u) => !isStudio(u)) || p.images![0];
     setPrev((o) => ({ ...o, [p.id]: { state: "busy" } }));
-    try { const res = await studioPreview(user, src, "extract", `${p.name} ${p.categoryName}`, variant, prompt); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
+    try { const res = await studioPreview(user, src, "extract", `${p.name} ${p.categoryName}`, variant, prompt, bg, hand); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
     catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
   };
   const approve = async (p: Product) => {
@@ -133,7 +134,12 @@ export default function EnhancePage() {
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>صور استوديو:</b>
           <button className={`chip${mode === "extract" ? " on" : ""}`} onClick={() => setMode("extract")}>قص المنتج بالذكاء الاصطناعي (مُستحسن)</button>
-          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة رسم بـ Gemini (محتاج تفعيل الدفع)</button>
+          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة تصوير من الأمام بـ Gemini (محتاج تفعيل الدفع)</button>
+        </div>
+        <div className="row wrap g8">
+          <b style={{ minWidth: 90 }}>الخلفية:</b>
+          <button className={`chip${bg === "white" ? " on" : ""}`} onClick={() => setBg("white")}>بيضا</button>
+          <button className={`chip${bg === "studio" ? " on" : ""}`} onClick={() => setBg("studio")}>استوديو (حيطة + ترابيزة بيج)</button>
           <span className="sp" />
           <button className="btn" disabled={!!running || !sel.length} onClick={runStudio}><i className="ph ph-image" />جهّز المعاينة ({sel.length})</button>
         </div>
@@ -167,6 +173,7 @@ export default function EnhancePage() {
                     <span className="mu">ناقصة؟ جرّب:</span>
                     <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "product")}>المنتج بس</button>
                     <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "boxed")}>المنتج مع العلبة</button>
+                    <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "auto", "", true)}>شيل الإيد/الصباع وكمّل المنتج</button>
                     <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => { const w = prompt("اكتب بالإنجليزي اللي عايز يتقص (مثال: black wireless earbuds and case):", pr.res?.cut || ""); if (w) retry(p, "auto", w); }}>كلمات مخصوصة…</button>
                     {pr.res?.cut && <small className="mu" style={{ width: "100%" }}>اتقص: {pr.res.cut}</small>}
                   </div>
