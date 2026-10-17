@@ -21,18 +21,20 @@ const READ_PROMPT = `دي صورة منتج من متجر جملة. اقرأ أ�
 - ماتخترعش أي حاجة مش مكتوبة أو واضحة في الصورة.
 - اكتب اسم المواصفة بالعربي، والقيمة زي ما هي (الأرقام والأكواد بالإنجليزي).
 - تجاهل الشعارات الدعائية والكلام العام.
-رجّع JSON فقط: {"hasText": true/false, "specs": [{"k":"...","v":"..."}]}`;
+وكمان في "parts": اكتب بالإنجليزي (كلمة أو كلمتين لكل واحدة) القطع الحقيقية للمنتج اللي ظاهرة في الصورة، من غير العلبة ومن غير الرسومات (مثال: ["headphones"] أو ["braided cable","usb plug","type-c connector"] أو ["wireless earbuds","charging case"]).
+رجّع JSON فقط: {"hasText": true/false, "specs": [{"k":"...","v":"..."}], "parts": ["..."]}`;
 
-function parseSpecs(t: string): { hasText: boolean; specs: Spec[] } {
+function parseSpecs(t: string): { hasText: boolean; specs: Spec[]; parts: string[] } {
   try {
     const m = t.match(/\{[\s\S]*\}/);
     const j = JSON.parse(m ? m[0] : t);
     const specs = (Array.isArray(j.specs) ? j.specs : []).filter((s: Spec) => s && s.k && s.v).map((s: Spec) => ({ k: String(s.k).trim().slice(0, 40), v: String(s.v).trim().slice(0, 120) })).slice(0, 12);
-    return { hasText: !!j.hasText || specs.length > 0, specs };
-  } catch { return { hasText: false, specs: [] }; }
+    const parts = (Array.isArray(j.parts) ? j.parts : []).map((x: unknown) => String(x).toLowerCase().replace(/[^a-z0-9 -]/g, "").trim()).filter(Boolean).slice(0, 4);
+    return { hasText: !!j.hasText || specs.length > 0, specs, parts };
+  } catch { return { hasText: false, specs: [], parts: [] }; }
 }
 
-async function readText(b64: string): Promise<{ hasText: boolean; specs: Spec[]; by: string }> {
+async function readText(b64: string): Promise<{ hasText: boolean; specs: Spec[]; parts: string[]; by: string }> {
   const e = process.env;
   if (e.GEMINI_API_KEY) {
     for (const model of Array.from(new Set([e.GEMINI_MODEL || "gemini-flash-lite-latest", "gemini-flash-latest"]))) {
@@ -57,7 +59,7 @@ async function readText(b64: string): Promise<{ hasText: boolean; specs: Spec[];
       if (r.ok) return { ...parseSpecs(String(j?.choices?.[0]?.message?.content || "")), by: "Groq" };
     } catch { /* ignore */ }
   }
-  return { hasText: false, specs: [], by: "" };
+  return { hasText: false, specs: [], parts: [], by: "" };
 }
 
 /* ---------- 2a) Gemini image model ---------- */
@@ -86,12 +88,32 @@ async function geminiImage(b64: string): Promise<string | null> {
   return null;
 }
 
-/* ---------- 2b) Cloudinary composite fallback ---------- */
-function compositeUrl(src: string) {
+/* ---------- 2b) Cloudinary: extract just the product (AI), place it on the studio backdrop ---------- */
+// what to cut out, guessed from the Arabic name/category when the vision model didn't tell us
+const GUESS: [RegExp, string[]][] = [
+  [/ايربود|ايربودز|earbud|air ?pod/i, ["wireless earbuds", "charging case"]],
+  [/هيد ?فون|سماعة رأس|سماعه راس|headphone|headset/i, ["headphones"]],
+  [/هاند ?فري|سماعة سلك|earphone/i, ["earphones", "cable", "plug"]],
+  [/صب|سبيكر|speaker/i, ["bluetooth speaker"]],
+  [/باور|power ?bank/i, ["power bank"]],
+  [/شاحن|charger|adapter/i, ["charger", "power adapter", "cable"]],
+  [/كابل|وصلة|cable/i, ["cable", "usb plug", "connector"]],
+  [/ساع|watch/i, ["smart watch", "watch strap"]],
+  [/استراب|strap|band/i, ["watch strap"]],
+  [/جراب|كفر|case|cover/i, ["phone case"]],
+  [/سكرين|اسكرينة|شاشة|screen|glass/i, ["screen protector"]],
+  [/هولدر|حامل|holder/i, ["phone holder"]],
+  [/فستان|بلوز|قميص|بنطلون|جيبة|جيبه|عباية|سويت|هودي|ملابس|توب|كوت|جاكيت|شميز/i, ["clothing", "garment"]],
+];
+const guessParts = (text: string) => GUESS.find(([re]) => re.test(text))?.[1] || ["product"];
+
+function compositeUrl(src: string, parts: string[]) {
   const m = src.match(/res\.cloudinary\.com\/[^/]+\/image\/upload\/(?:[^/]+\/)*?v\d+\/(.+?)(\.[a-z0-9]+)?$/i);
   if (!m) return null;
   const id = m[1], ext = m[2] || ".jpg", layer = id.replace(/\//g, ":");
-  return `https://res.cloudinary.com/${CLD}/image/upload/c_scale,w_1200,h_1200/e_colorize:100,co_rgb:F3F0EA/l_${layer},c_scale,w_1200,h_520,e_colorize:100,co_rgb:F0DCC4/fl_layer_apply,g_south/l_${layer}/e_background_removal/c_fit,w_900,h_900/e_shadow:40,x_0,y_14/fl_layer_apply,g_center,y_90/q_auto:best/f_jpg/${id}${ext}`;
+  const list = parts.map((p) => encodeURIComponent(p)).join(";");
+  const prompt = parts.length > 1 ? `prompt_(${list});multiple_true` : `prompt_${list}`;
+  return `https://res.cloudinary.com/${CLD}/image/upload/c_scale,w_1200,h_1200/e_colorize:100,co_rgb:F3F0EA/l_${layer},c_scale,w_1200,h_520,e_colorize:100,co_rgb:F0DCC4/fl_layer_apply,g_south/l_${layer}/e_extract:${prompt}/e_trim/c_fit,w_900,h_800/e_shadow:35,x_0,y_16/fl_layer_apply,g_south,y_150/q_auto:best/f_jpg/${id}${ext}`;
 }
 
 async function upload(file: string) {
@@ -105,19 +127,22 @@ async function upload(file: string) {
 
 export async function POST(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const { url, mode } = (await req.json()) as { url: string; mode?: "auto" | "composite" };
+  const { url, mode, name } = (await req.json()) as { url: string; mode?: "gemini" | "extract"; name?: string };
   if (!url || !url.includes("res.cloudinary.com")) return Response.json({ error: "الصورة لازم تكون على Cloudinary" }, { status: 400 });
   try {
     const img = await fetch(sized(url, 1024).replace("f_auto", "f_jpg"));
     if (!img.ok) throw err(`مقدرتش أفتح الصورة (${img.status})`);
     const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
-    const [read, gen] = await Promise.all([readText(b64), mode === "composite" ? Promise.resolve(null) : geminiImage(b64)]);
+    const [read, gen] = await Promise.all([readText(b64), mode === "gemini" ? geminiImage(b64) : Promise.resolve(null)]);
     let image = "", method = "";
     if (gen) { image = await upload(gen); method = "ai"; }
     else {
-      const c = compositeUrl(url);
+      if (mode === "gemini") throw err("موديل الصور في Gemini مش متاح على مفتاحك (غالباً محتاج تفعيل الدفع في Google AI Studio). استخدم طريقة \"قص المنتج\".", 400);
+      const c = compositeUrl(url, read.parts.length ? read.parts : guessParts(name || ""));
       if (!c) throw err("الصورة مش بصيغة نقدر نعالجها");
-      for (let i = 0; i < 4; i++) { const w = await fetch(c, { cache: "no-store" }); if (w.ok) break; await new Promise((r) => setTimeout(r, 3000)); }
+      let ok = false, why = "";
+      for (let i = 0; i < 4 && !ok; i++) { const w = await fetch(c, { cache: "no-store" }); ok = w.ok; why = w.headers.get("x-cld-error") || String(w.status); if (!ok) await new Promise((r) => setTimeout(r, 4000)); }
+      if (!ok) throw err(`Cloudinary: ${why}`);
       image = await upload(c); method = "studio";
     }
     return Response.json({ image, method, specs: read.specs, hasText: read.hasText, readBy: read.by });

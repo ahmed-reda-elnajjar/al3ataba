@@ -8,7 +8,7 @@ import { useApp } from "@/lib/providers";
 import { withId } from "@/lib/store";
 import { sized } from "@/lib/media";
 import { norm } from "@/components/SearchBox";
-import { applyStudio, enhanceMany, restoreImagesMany, studioPreview, undoEnhance, type StudioResult, type Step } from "@/lib/enhance";
+import { applyStudio, enhanceMany, isStudio, restoreImagesMany, studioPreview, undoEnhance, type StudioResult, type Step } from "@/lib/enhance";
 import type { Product } from "@/lib/types";
 
 type Prev = { state: "busy" | "ready" | "err" | "saved" | "skip"; res?: StudioResult; error?: string };
@@ -35,7 +35,7 @@ export default function EnhancePage() {
 
   // ---- studio photos (preview → approve)
   const [prev, setPrev] = useState<Record<string, Prev>>({});
-  const [mode, setMode] = useState<"auto" | "composite">("auto");
+  const [mode, setMode] = useState<"extract" | "gemini">("extract");
   const stopRef = useRef(false);
   const [running, setRunning] = useState("");
   const runStudio = async () => {
@@ -46,8 +46,8 @@ export default function EnhancePage() {
     const work = async () => {
       while (queue.length && !stopRef.current) {
         const p = queue.shift()!;
-        const src = p.imagesOrig?.[0] || p.images![0]; // always start from the original photo
-        try { const res = await studioPreview(user, src, mode); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
+        const src = p.imagesOrig?.[0] || p.images!.find((u) => !isStudio(u)) || p.images![0]; // always start from the original photo
+        try { const res = await studioPreview(user, src, mode, `${p.name} ${p.categoryName}`); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
         catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
       }
     };
@@ -125,8 +125,8 @@ export default function EnhancePage() {
       <div className="card col" style={{ gap: 12 }}>
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>صور استوديو:</b>
-          <button className={`chip${mode === "auto" ? " on" : ""}`} onClick={() => setMode("auto")}>بالذكاء الاصطناعي (بيشيل الكلام)</button>
-          <button className={`chip${mode === "composite" ? " on" : ""}`} onClick={() => setMode("composite")}>قص ولصق على الخلفية (أسرع)</button>
+          <button className={`chip${mode === "extract" ? " on" : ""}`} onClick={() => setMode("extract")}>قص المنتج بالذكاء الاصطناعي (مُستحسن)</button>
+          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة رسم بـ Gemini (محتاج تفعيل الدفع)</button>
           <span className="sp" />
           <button className="btn" disabled={!!running || !sel.length} onClick={runStudio}><i className="ph ph-image" />جهّز المعاينة ({sel.length})</button>
         </div>
@@ -143,7 +143,7 @@ export default function EnhancePage() {
       {previews.length > 0 && (
         <div className="card col" style={{ gap: 10, borderColor: "var(--gold)" }}>
           <div className="row wrap"><b className="sp">معاينة صور الاستوديو</b>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
-          <small className="mu">بص على كل صورة: لو المنتج اتغيّر أو حاجة ناقصة دوس "ارفض". مفيش حاجة بتتحفظ غير لما تعتمد.</small>
+          <small className="mu">بص على كل صورة: لو المنتج اتغيّر أو حاجة ناقصة دوس "ارفض". مفيش حاجة بتتحفظ غير لما تعتمد. لما تعتمد، الصورة الجديدة بتبقى الصورة الرئيسية والصور الأصلية بتفضل موجودة بعدها في المعرض.</small>
           <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 2, gap: 12 }}>
             {previews.map((p) => { const pr = prev[p.id]; return (
               <div key={p.id} className="col" style={{ border: "1px solid var(--bd)", borderRadius: 14, padding: 10, gap: 8, background: pr.state === "saved" ? "#f3f8f5" : undefined }}>
@@ -152,7 +152,7 @@ export default function EnhancePage() {
                   <figure style={{ margin: 0, flex: 1, textAlign: "center" }}><img src={sized(p.imagesOrig?.[0] || p.images?.[0], 400)} alt="قبل" style={{ width: "100%", aspectRatio: "1", objectFit: "contain", borderRadius: 10, background: "#fff" }} /><figcaption className="mu" style={{ fontSize: 12 }}>قبل</figcaption></figure>
                   <figure style={{ margin: 0, flex: 1, textAlign: "center" }}>
                     {pr.state === "busy" ? <div className="skel" style={{ width: "100%", aspectRatio: "1" }} /> : pr.res ? <img src={sized(pr.res.image, 400)} alt="بعد" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10 }} /> : <div className="alert e" style={{ aspectRatio: "1", display: "grid", placeItems: "center", fontSize: 13 }}>{pr.error}</div>}
-                    <figcaption className="mu" style={{ fontSize: 12 }}>بعد{pr.res ? (pr.res.method === "ai" ? " (ذكاء اصطناعي)" : " (قص ولصق)") : ""}</figcaption>
+                    <figcaption className="mu" style={{ fontSize: 12 }}>بعد{pr.res ? (pr.res.method === "ai" ? " (Gemini)" : " (قص المنتج)") : ""}</figcaption>
                   </figure>
                 </div>
                 {pr.res && pr.res.specs.length > 0 && <small><b>اتقري من الصورة:</b> {pr.res.specs.map((s) => `${s.k}: ${s.v}`).join(" · ")}</small>}

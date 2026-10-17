@@ -173,24 +173,24 @@ export async function restoreImagesMany(list: Product[], onDone?: (n: number) =>
 
 /* ---------- AI studio photo (preview first, then approve) ---------- */
 export type StudioResult = { image: string; method: "ai" | "studio"; specs: { k: string; v: string }[]; hasText: boolean };
-export async function studioPreview(user: User, url: string, mode: "auto" | "composite" = "auto"): Promise<StudioResult> {
-  const r = await fetch("/api/ai-image", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, mode }) });
+export async function studioPreview(user: User, url: string, mode: "extract" | "gemini" = "extract", name = ""): Promise<StudioResult> {
+  const r = await fetch("/api/ai-image", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, mode, name }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j as StudioResult;
 }
 /** Save an approved studio photo as the cover + merge the specs read from the picture. */
 export async function applyStudio(p: Product, res: StudioResult) {
-  const imgs = p.images || [];
-  const old = imgs[0];
-  const images = [res.image, ...imgs.slice(1)];
-  const media = p.media?.length ? p.media.map((u) => (u === old ? res.image : u)) : undefined;
+  // the studio photo becomes the main picture; every original photo stays in the gallery after it
+  const imgs = (p.images || []).filter((u) => !isStudio(u));
+  const images = [res.image, ...imgs];
+  const media = p.media?.length ? [res.image, ...p.media.filter((u) => !isStudio(u))] : undefined;
   const have = new Set((p.specs || []).map((s) => s.k.trim()));
   const specs = [...(p.specs || []), ...res.specs.filter((s) => !have.has(s.k.trim()))];
   const f: Partial<Product> = {
     images, ...(media ? { media } : {}), specs, studio: true, reviewed: false,
     ...(res.specs.length ? { aiCopy: false } : {}), // new specs → the next description rewrite will use them
-    ...(p.imagesOrig ? {} : { imagesOrig: imgs, ...(p.media?.length ? { mediaOrig: p.media } : {}) }),
+    ...(p.imagesOrig ? {} : { imagesOrig: p.images || [], ...(p.media?.length ? { mediaOrig: p.media } : {}) }),
   };
   await updateDoc(doc(dbI(), "products", p.id), f);
   return f;
