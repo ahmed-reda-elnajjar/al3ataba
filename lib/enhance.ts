@@ -172,9 +172,9 @@ export async function restoreImagesMany(list: Product[], onDone?: (n: number) =>
 }
 
 /* ---------- AI studio photo (preview first, then approve) ---------- */
-export type StudioResult = { image: string; method: "ai" | "studio"; specs: { k: string; v: string }[]; hasText: boolean };
-export async function studioPreview(user: User, url: string, mode: "extract" | "gemini" = "extract", name = ""): Promise<StudioResult> {
-  const r = await fetch("/api/ai-image", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, mode, name }) });
+export type StudioResult = { image: string; method: "ai" | "studio"; specs: { k: string; v: string }[]; hasText: boolean; cut?: string };
+export async function studioPreview(user: User, url: string, mode: "extract" | "gemini" = "extract", name = "", variant: "auto" | "product" | "boxed" = "auto", prompt = ""): Promise<StudioResult> {
+  const r = await fetch("/api/ai-image", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, mode, name, variant, prompt }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j as StudioResult;

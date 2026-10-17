@@ -54,6 +54,13 @@ export default function EnhancePage() {
     await Promise.all([work(), work(), work()]);
     setRunning("");
   };
+  const retry = async (p: Product, variant: "auto" | "product" | "boxed", prompt = "") => {
+    if (!user) return;
+    const src = p.imagesOrig?.[0] || p.images!.find((u) => !isStudio(u)) || p.images![0];
+    setPrev((o) => ({ ...o, [p.id]: { state: "busy" } }));
+    try { const res = await studioPreview(user, src, "extract", `${p.name} ${p.categoryName}`, variant, prompt); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
+    catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
+  };
   const approve = async (p: Product) => {
     const pr = prev[p.id]; if (!pr?.res) return;
     try { await applyStudio(p, pr.res); setPrev((o) => ({ ...o, [p.id]: { ...pr, state: "saved" } })); }
@@ -155,6 +162,15 @@ export default function EnhancePage() {
                     <figcaption className="mu" style={{ fontSize: 12 }}>بعد{pr.res ? (pr.res.method === "ai" ? " (Gemini)" : " (قص المنتج)") : ""}</figcaption>
                   </figure>
                 </div>
+                {pr.state !== "busy" && pr.state !== "saved" && (
+                  <div className="row wrap g4" style={{ fontSize: 13 }}>
+                    <span className="mu">ناقصة؟ جرّب:</span>
+                    <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "product")}>المنتج بس</button>
+                    <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => retry(p, "boxed")}>المنتج مع العلبة</button>
+                    <button className="chip" style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => { const w = prompt("اكتب بالإنجليزي اللي عايز يتقص (مثال: black wireless earbuds and case):", pr.res?.cut || ""); if (w) retry(p, "auto", w); }}>كلمات مخصوصة…</button>
+                    {pr.res?.cut && <small className="mu" style={{ width: "100%" }}>اتقص: {pr.res.cut}</small>}
+                  </div>
+                )}
                 {pr.res && pr.res.specs.length > 0 && <small><b>اتقري من الصورة:</b> {pr.res.specs.map((s) => `${s.k}: ${s.v}`).join(" · ")}</small>}
                 <div className="row g8">
                   {pr.state === "ready" && <><button className="btn sm2" onClick={() => approve(p)}><i className="ph ph-check" />اعتمد</button><button className="btn o sm2" onClick={() => reject(p.id)}>ارفض</button></>}
