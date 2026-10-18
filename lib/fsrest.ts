@@ -3,11 +3,11 @@
 import type { Category, Product } from "./types";
 
 const PROJECT = "al3ataba-c6a08";
-const KEY = "AIzaSyCPXarDZxgfjpdxa6MJ8x6o2qlDcxZ-T6A"; // public web key (same as lib/firebase.ts)
-const ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+export const KEY = "AIzaSyCPXarDZxgfjpdxa6MJ8x6o2qlDcxZ-T6A"; // public web key (same as lib/firebase.ts)
+export const ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 export const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://al3ataba.vercel.app").replace(/\/+$/, "");
 
-type V = { stringValue?: string; integerValue?: string; doubleValue?: number; booleanValue?: boolean; nullValue?: null; timestampValue?: string; arrayValue?: { values?: V[] }; mapValue?: { fields?: Record<string, V> } };
+export type V = { stringValue?: string; integerValue?: string; doubleValue?: number; booleanValue?: boolean; nullValue?: null; timestampValue?: string; arrayValue?: { values?: V[] }; mapValue?: { fields?: Record<string, V> } };
 function val(v: V): unknown {
   if (v.stringValue !== undefined) return v.stringValue;
   if (v.integerValue !== undefined) return Number(v.integerValue);
@@ -19,7 +19,7 @@ function val(v: V): unknown {
   return null;
 }
 const obj = (f: Record<string, V>) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, val(v)]));
-const fromDoc = <T,>(d: { name: string; fields?: Record<string, V>; updateTime?: string }) => ({ id: d.name.split("/").pop()!, ...obj(d.fields || {}), _updated: d.updateTime }) as unknown as T & { _updated?: string };
+export const fromDoc = <T,>(d: { name: string; fields?: Record<string, V>; updateTime?: string }) => ({ id: d.name.split("/").pop()!, ...obj(d.fields || {}), _updated: d.updateTime }) as unknown as T & { _updated?: string };
 
 const REV = { next: { revalidate: 3600 } }; // cache for an hour
 
@@ -30,8 +30,13 @@ export async function restProduct(id: string) {
   return p.status === "active" ? p : null;
 }
 export async function restCategory(id: string) {
+  return (await restCategoryRes(id)).c;
+}
+/** Category + whether it really doesn't exist (404) — vs. a temporary failure (quota / network), which must NOT become a 404 page. */
+export async function restCategoryRes(id: string): Promise<{ c: Category | null; missing: boolean }> {
   const r = await fetch(`${ROOT}/categories/${encodeURIComponent(id)}?key=${KEY}`, REV).catch(() => null);
-  return r?.ok ? fromDoc<Category>(await r.json()) : null;
+  if (r?.ok) return { c: fromDoc<Category>(await r.json()), missing: false };
+  return { c: null, missing: r?.status === 404 };
 }
 export async function restCategories() {
   const r = await fetch(`${ROOT}/categories?pageSize=300&key=${KEY}`, REV).catch(() => null);

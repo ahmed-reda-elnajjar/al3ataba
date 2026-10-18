@@ -1,4 +1,5 @@
 "use client";
+import { touchCatalog } from "@/lib/catalogClient";
 import { useEffect, useMemo, useState } from "react";
 import { addDoc, collection, getDoc, doc, getDocs, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
@@ -196,7 +197,7 @@ export default function ImportSite() {
     if (!soldOutHere.length || !confirm(`إخفاء ${soldOutHere.length} منتج خلصوا من عند المورد؟ (تقدر تنشرهم تاني بعدين)`)) return;
     let bt = writeBatch(dbI()), k = 0;
     for (const r of soldOutHere) { bt.update(doc(dbI(), "products", r.docId!), { status: "hidden", outOfStock: true }); if (++k % 400 === 0) { await bt.commit(); bt = writeBatch(dbI()); } }
-    await bt.commit();
+    await bt.commit(); touchCatalog();
     setRows((rs) => rs.map((r) => (soldOutHere.includes(r) ? { ...r, docStatus: "hidden", note: "اتخفى (خلصان)" } : r)));
     setHmsg(`اتخفى ${k} منتج ✓`);
   };

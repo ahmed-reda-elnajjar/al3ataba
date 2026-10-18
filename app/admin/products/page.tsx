@@ -1,4 +1,5 @@
 "use client";
+import { touchCatalog } from "@/lib/catalogClient";
 import { sized } from "@/lib/media";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -22,7 +23,7 @@ export default function AdminProducts() {
   }, []);
   const [f, setF] = useState("all");
   const [q, setQ] = useState("");
-  const set = async (p: Product, status: string) => { await updateDoc(doc(dbI(), "products", p.id), { status, ...(status === "active" && p.status === "pending" ? { reviewed: true } : {}) }); reload(); };
+  const set = async (p: Product, status: string) => { await updateDoc(doc(dbI(), "products", p.id), { status, ...(status === "active" && p.status === "pending" ? { reviewed: true } : {}) }); reload(); touchCatalog(); };
   // "تم المراجعة" — toggled locally so the list doesn't reload for every click
   const [revOver, setRevOver] = useState<Record<string, boolean>>({});
   const isRev = (p: Product) => revOver[p.id] ?? !!p.reviewed;
@@ -52,7 +53,7 @@ export default function AdminProducts() {
     for (const pid of sel) { b.update(doc(dbI(), "products", pid), { extraCats: add ? arrayUnion(catTo) : arrayRemove(catTo) }); if (++k % 400 === 0) { await b.commit(); b = writeBatch(dbI()); } }
     await b.commit();
     const n = catsQ.data?.find((c) => c.id === catTo)?.name || "";
-    setCmsg(add ? `تم: ${sel.length} منتج بقوا بيظهروا كمان في "${n}".` : `تم: اتشال "${n}" من ${sel.length} منتج.`); setSel([]); reload();
+    setCmsg(add ? `تم: ${sel.length} منتج بقوا بيظهروا كمان في "${n}".` : `تم: اتشال "${n}" من ${sel.length} منتج.`); setSel([]); reload(); touchCatalog();
   };
   const newSupplier = async () => {
     const n = prompt("اسم المورد (بيظهر للإدارة بس):")?.trim();
@@ -108,7 +109,7 @@ export default function AdminProducts() {
     }
     await b.commit();
     setRmsg(action === "active" ? `اتنشر ${ids.length} منتج ✓` : action === "hidden" ? `اتخفى ${ids.length} منتج` : `اتحذف ${ids.length} منتج`);
-    setSel([]); reload();
+    setSel([]); reload(); touchCatalog();
   };
   const revDone = (data ?? []).filter(isRev).length;
   const list = (data ?? []).filter((p) => (f === "all" || p.status === f) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));

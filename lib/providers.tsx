@@ -5,6 +5,7 @@ import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { authI, dbI } from "./firebase";
 import { ADMIN_EMAILS, DEFAULT_SETTINGS } from "./config";
 import { getSettings } from "./store";
+import { setCatalogBypass } from "./catalogClient";
 import { attachUser } from "./reco";
 import type { CartItem, Merchant, Product, Promo, Settings } from "./types";
 import { applyPromos, listPromos, priceCart } from "./promos";
@@ -51,6 +52,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const loggedIn = !!user && !user.isAnonymous;
   const isAdmin = loggedIn && !!user?.emailVerified && ADMIN_EMAILS.includes((user?.email || "").toLowerCase());
+  // admins always read live data (and their edits refresh the cached catalogue); visitors read the cached one
+  if (typeof window !== "undefined") setCatalogBypass(isAdmin);
 
   useEffect(() => {
     if (!ready) return;

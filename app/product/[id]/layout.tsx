@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { SITE, firstImage, minPrice, plain, restProduct } from "@/lib/fsrest";
 import { sized } from "@/lib/media";
+import { catalogOrNull } from "@/lib/catalog";
+
+/** From the cached catalogue first (0 Firebase reads); direct read only for products not in it yet. */
+const find = async (id: string) => (await catalogOrNull())?.products.find((p) => p.id === id) || (await restProduct(id));
 
 /* Server part of the product page: title/description/image for Google & WhatsApp previews + Product structured data. */
 type Props = { params: Promise<{ id: string }>; children: React.ReactNode };
 
 export async function generateMetadata({ params }: Omit<Props, "children">): Promise<Metadata> {
   const { id } = await params;
-  const p = await restProduct(id);
+  const p = await find(id);
   if (!p) return { title: "منتج | العتبة أونلاين", robots: { index: false } };
   const price = minPrice(p);
   const title = `${p.name} بسعر الجملة${price ? ` ${price} ج.م` : ""} | العتبة أونلاين`;
@@ -24,7 +28,7 @@ export async function generateMetadata({ params }: Omit<Props, "children">): Pro
 
 export default async function ProductLayout({ params, children }: Props) {
   const { id } = await params;
-  const p = await restProduct(id);
+  const p = await find(id);
   const ld = p && {
     "@context": "https://schema.org", "@type": "Product", name: p.name,
     description: plain(p.description || p.name, 500), category: p.categoryName,

@@ -1,4 +1,5 @@
 "use client";
+import { touchCatalog } from "@/lib/catalogClient";
 import { useState } from "react";
 import { collection, doc, getDocs, limit, query, updateDoc } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
@@ -14,7 +15,7 @@ export default function AdminMerchants() {
     return s.docs.map((d) => withId<Merchant>(d)).sort((a, b) => ms(b.createdAt) - ms(a.createdAt));
   }, []);
   const [f, setF] = useState("all");
-  const patch = async (m: Merchant, v: Partial<Merchant>) => { await updateDoc(doc(dbI(), "merchants", m.id), v); reload(); };
+  const patch = async (m: Merchant, v: Partial<Merchant>) => { await updateDoc(doc(dbI(), "merchants", m.id), v); reload(); touchCatalog(); };
   const list = (data ?? []).filter((m) => f === "all" || m.status === f);
   return (
     <>

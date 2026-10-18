@@ -1,4 +1,5 @@
 "use client";
+import { touchCatalog } from "@/lib/catalogClient";
 import { sized } from "@/lib/media";
 import { useState } from "react";
 import { addDoc, collection, deleteDoc, doc, updateDoc, writeBatch } from "firebase/firestore";
@@ -21,23 +22,23 @@ export default function AdminCategories() {
   const setImg = async (id: string, file?: File) => {
     if (!file || !user) return;
     setUp(id); setErr("");
-    try { await updateDoc(doc(dbI(), "categories", id), { image: await uploadImage(file, user.uid, "products") }); reload(); }
+    try { await updateDoc(doc(dbI(), "categories", id), { image: await uploadImage(file, user.uid, "products") }); reload(); touchCatalog(); }
     catch { setErr("تعذّر رفع الصورة."); }
     setUp("");
   };
-  const clearImg = async (id: string) => { await updateDoc(doc(dbI(), "categories", id), { image: "" }); reload(); };
+  const clearImg = async (id: string) => { await updateDoc(doc(dbI(), "categories", id), { image: "" }); reload(); touchCatalog(); };
   const add = async () => {
     if (name.trim().length < 2) return setErr("اكتب اسم القسم.");
     setErr("");
     await addDoc(collection(dbI(), "categories"), { name: name.trim(), icon, order: (data?.length ?? 0) + 1 });
-    setName(""); reload();
+    setName(""); reload(); touchCatalog();
   };
   const seed = async () => {
     const b = writeBatch(dbI());
     DEFAULT_CATEGORIES.forEach((c, i) => b.set(doc(collection(dbI(), "categories")), { ...c, order: i + 1 }));
-    await b.commit(); reload();
+    await b.commit(); reload(); touchCatalog();
   };
-  const rename = async (id: string, v: string) => { if (v.trim()) await updateDoc(doc(dbI(), "categories", id), { name: v.trim() }); };
+  const rename = async (id: string, v: string) => { if (v.trim()) { await updateDoc(doc(dbI(), "categories", id), { name: v.trim() }); touchCatalog(); } };
   const move = async (i: number, d: number) => {
     const list = data ?? [];
     const j = i + d;
@@ -47,16 +48,16 @@ export default function AdminCategories() {
       const pos = k === i ? j : k === j ? i : k;
       if (pos !== k || c.order !== k + 1) b.update(doc(dbI(), "categories", c.id), { order: pos + 1 });
     });
-    await b.commit(); reload();
+    await b.commit(); reload(); touchCatalog();
   };
   const saveOrder = async (next: Category[]) => {
     const b = writeBatch(dbI());
     next.forEach((c, k) => { if (c.order !== k + 1) b.update(doc(dbI(), "categories", c.id), { order: k + 1 }); });
     try { await b.commit(); } catch { setErr("تعذّر حفظ الترتيب."); }
-    reload();
+    reload(); touchCatalog();
   };
   const dnd = useDragSort<Category>(data ?? [], (c) => c.id, saveOrder);
-  const del = async (id: string, n: string) => { if (confirm(`حذف قسم "${n}"؟ المنتجات اللي فيه هتفضل موجودة.`)) { await deleteDoc(doc(dbI(), "categories", id)); reload(); } };
+  const del = async (id: string, n: string) => { if (confirm(`حذف قسم "${n}"؟ المنتجات اللي فيه هتفضل موجودة.`)) { await deleteDoc(doc(dbI(), "categories", id)); reload(); touchCatalog(); } };
   return (
     <>
       <div className="card col">

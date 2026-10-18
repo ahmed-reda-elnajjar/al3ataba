@@ -1,10 +1,14 @@
 import type { MetadataRoute } from "next";
 import { SITE, restCategories, restProducts } from "@/lib/fsrest";
+import { catalogOrNull } from "@/lib/catalog";
 
 export const revalidate = 21600; // rebuild every 6 hours
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [cats, products] = await Promise.all([restCategories(), restProducts()]);
+  const cat = await catalogOrNull();
+  const [cats, products] = cat
+    ? [cat.categories.map((c) => ({ ...c, _updated: undefined as string | undefined })), cat.products.map((p) => ({ ...p, _updated: undefined as string | undefined }))]
+    : await Promise.all([restCategories(), restProducts()]);
   const now = new Date();
   return [
     { url: `${SITE}/`, lastModified: now, changeFrequency: "daily", priority: 1 },

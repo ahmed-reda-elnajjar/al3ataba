@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { SITE, firstImage, minPrice, restCategory, restProducts } from "@/lib/fsrest";
+import { notFound, redirect } from "next/navigation";
+import { SITE, firstImage, minPrice, restCategory, restCategoryRes, restProducts } from "@/lib/fsrest";
 import { sized } from "@/lib/media";
+import { catalogOrNull } from "@/lib/catalog";
+import type { Category, Product } from "@/lib/types";
 import { ProductCard } from "@/components/Ui";
 
 /* Category landing page rendered on the server, so Google sees the real product names and prices. */
@@ -11,7 +13,7 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const c = await restCategory(id);
+  const c = (await catalogOrNull())?.categories.find((x) => x.id === id) || (await restCategory(id));
   if (!c) return { title: "قسم | العتبة أونلاين" };
   const title = `${c.name} بالجملة | أسعار ${c.name} في العتبة أونلاين`;
   const description = `اشتري ${c.name} بسعر الجملة من تجار ومصانع العتبة. أسعار بالكمية، وتوصيل لكل محافظات مصر.`;
@@ -23,8 +25,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params }: Props) {
   const { id } = await params;
-  const [c, products] = await Promise.all([restCategory(id), restProducts({ cat: id, limit: 120 })]);
-  if (!c) notFound();
+  // read from the cached catalogue (no Firebase reads per visit); fall back to direct reads only if it's unavailable
+  const cat = await catalogOrNull();
+  let c: Category | null = null, missing = false, products: Product[] = [];
+  if (cat) {
+    c = cat.categories.find((x) => x.id === id) || null; missing = !c;
+    products = cat.products.filter((p) => p.categoryId === id || !!p.extraCats?.includes(id)).slice(0, 120);
+  } else {
+    const [r, ps] = await Promise.all([restCategoryRes(id), restProducts({ cat: id, limit: 120 })]);
+    c = r.c; missing = r.missing; products = ps;
+  }
+  if (!c) {
+    if (missing) notFound();
+    redirect(`/search?cat=${encodeURIComponent(id)}`); // server read failed for a moment → show the same products from the browser instead of a 404
+  }
   const list = [...products].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
   const ld = {
     "@context": "https://schema.org", "@type": "ItemList", name: c.name,

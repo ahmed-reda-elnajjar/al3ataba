@@ -1,4 +1,5 @@
 "use client";
+import { touchCatalog } from "@/lib/catalogClient";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
@@ -139,6 +140,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
       const write = p ? updateDoc(doc(dbI(), "products", p.id), { ...data, updatedAt: serverTimestamp() })
         : addDoc(collection(dbI(), "products"), { ...data, merchantId: owner.id, merchantName: owner.name, ownerUid: user, createdAt: serverTimestamp() });
       await Promise.race([write, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), 60000))]);
+      touchCatalog(); // visitors see the change after the cached catalogue refreshes (admins only)
       router.push(back);
     } catch (e) {
       const c = (e as { code?: string })?.code || "";

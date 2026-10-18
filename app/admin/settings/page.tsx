@@ -1,4 +1,5 @@
 "use client";
+import { touchCatalog } from "@/lib/catalogClient";
 import { useState } from "react";
 import { doc, setDoc } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
@@ -15,7 +16,7 @@ export default function AdminSettings() {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS((x) => ({ ...x, [k]: v }));
   const save = async () => {
     setMsg("");
-    try { await setDoc(doc(dbI(), "settings", "site"), { ...s, shippingPerMerchant: Number(s.shippingPerMerchant) || 0 }); setMsg("تم الحفظ. التغييرات هتظهر للزوار بعد تحديث الصفحة."); }
+    try { await setDoc(doc(dbI(), "settings", "site"), { ...s, shippingPerMerchant: Number(s.shippingPerMerchant) || 0 }); touchCatalog(); setMsg("تم الحفظ. التغييرات هتظهر للزوار بعد تحديث الصفحة."); }
     catch { setMsg("تعذّر الحفظ."); }
   };
   return (

@@ -2,18 +2,17 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { QueryDocumentSnapshot } from "firebase/firestore";
 import { st } from "@/lib/style";
 import { useApp } from "@/lib/providers";
 import { isLive, promoLabel } from "@/lib/promos";
-import { pageActiveProducts, productsByIds } from "@/lib/store";
+import { pageActiveProducts, productsByIds, type Cursor } from "@/lib/store";
 import { sized } from "@/lib/media";
 import { PromoCard } from "@/components/Promos";
 import { Empty, Loading, ProductCard } from "@/components/Ui";
 import type { Product, Promo } from "@/lib/types";
 
 const PAGE = 24;
-type Src = { cat: string; cursor: QueryDocumentSnapshot | null; more: boolean };
+type Src = { cat: string; cursor: Cursor; more: boolean };
 
 function PromoProducts({ pr }: { pr: Promo }) {
   const [items, setItems] = useState<Product[]>([]);

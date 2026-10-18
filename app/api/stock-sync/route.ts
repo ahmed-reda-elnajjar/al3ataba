@@ -5,6 +5,8 @@
  * Needs env FIREBASE_SERVICE_ACCOUNT (the service-account JSON) set in Vercel — never in the code. */
 import { createSign } from "crypto";
 import { availability, fetchCatalogue } from "@/lib/stock";
+import { revalidateTag } from "next/cache";
+import { CATALOG_TAG } from "@/lib/catalog";
 import { isAdminToken } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +89,7 @@ export async function GET(req: Request) {
 
     const result = { at: new Date().toISOString(), checked, hidden, restored, gone, seconds: Math.round((Date.now() - started) / 1000), note: notes.join(" | "), by: cronOk ? "cron" : "admin" };
     await log(result);
+    if (hidden || restored) revalidateTag(CATALOG_TAG); // visitors stop seeing sold-out items right away
     return Response.json(result);
   } catch (e) {
     const msg = String((e as Error)?.message || e);

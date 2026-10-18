@@ -3,6 +3,7 @@ import { dbI } from "./firebase";
 import { withId } from "./store";
 import type { CartItem, Product, Promo, Tier } from "./types";
 import { priceFor } from "./pricing";
+import { catalog, touchCatalog } from "./catalogClient";
 
 /* ---------- reads / writes ---------- */
 let cache: { at: number; p: Promise<Promo[]> } | null = null;
@@ -10,8 +11,8 @@ export function listPromos(fresh = false): Promise<Promo[]> {
   if (fresh || !cache || Date.now() - cache.at > 5 * 60_000) {
     cache = {
       at: Date.now(),
-      p: getDocs(collection(dbI(), "promos"))
-        .then((s) => s.docs.map((d) => withId<Promo>(d)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)))
+      p: (fresh ? Promise.resolve(null) : catalog()).then((c) => c ? c.promos : getDocs(collection(dbI(), "promos"))
+        .then((s) => s.docs.map((d) => withId<Promo>(d)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))))
         .catch(() => { cache = null; return [] as Promo[]; }),
     };
   }
@@ -21,8 +22,9 @@ export const savePromo = async (id: string | null, data: Omit<Promo, "id">) => {
   cache = null;
   if (id) await updateDoc(doc(dbI(), "promos", id), { ...data, updatedAt: serverTimestamp() });
   else await addDoc(collection(dbI(), "promos"), { ...data, createdAt: serverTimestamp() });
+  touchCatalog();
 };
-export const deletePromo = async (id: string) => { cache = null; await deleteDoc(doc(dbI(), "promos", id)); };
+export const deletePromo = async (id: string) => { cache = null; await deleteDoc(doc(dbI(), "promos", id)); touchCatalog(); };
 
 /* ---------- logic ---------- */
 const day = (s?: string, end = false) => (s ? new Date(`${s}T${end ? "23:59:59" : "00:00:00"}`).getTime() : NaN);

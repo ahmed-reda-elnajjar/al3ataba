@@ -1,6 +1,9 @@
 "use client";
 import Link from "next/link";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getCountFromServer, getDocs, query, where } from "firebase/firestore";
+import { useState } from "react";
+import { useApp } from "@/lib/providers";
+import { refreshCatalog } from "@/lib/catalogClient";
 import { dbI } from "@/lib/firebase";
 import { useAsync } from "@/lib/hooks";
 import { fmt } from "@/lib/format";
@@ -23,16 +26,17 @@ export default function Admin() {
   const { data, loading } = useAsync(async () => {
     const db = dbI();
     const [p, pp, m, mp, o, r] = await Promise.all([
-      getDocs(query(collection(db, "products"), where("status", "==", "active"))),
-      getDocs(query(collection(db, "products"), where("status", "==", "pending"))),
-      getDocs(query(collection(db, "merchants"), where("status", "==", "approved"))),
-      getDocs(query(collection(db, "merchants"), where("status", "==", "pending"))),
+      // counts only (1 read per 1000 docs) instead of downloading every product
+      getCountFromServer(query(collection(db, "products"), where("status", "==", "active"))),
+      getCountFromServer(query(collection(db, "products"), where("status", "==", "pending"))),
+      getCountFromServer(query(collection(db, "merchants"), where("status", "==", "approved"))),
+      getCountFromServer(query(collection(db, "merchants"), where("status", "==", "pending"))),
       getDocs(collection(db, "orders")),
       getDocs(query(collection(db, "rfqs"), where("status", "==", "open"))),
     ]);
     const orders = o.docs.map((d) => d.data() as Order);
     return {
-      products: p.size, pendingProducts: pp.size, merchants: m.size, pendingMerchants: mp.size,
+      products: p.data().count, pendingProducts: pp.data().count, merchants: m.data().count, pendingMerchants: mp.data().count,
       orders: orders.length, newOrders: orders.filter((x) => x.status === "new").length,
       gmv: orders.filter((x) => x.status !== "cancelled").reduce((a, x) => a + (x.total || 0), 0), rfqs: r.size,
     };
@@ -47,6 +51,7 @@ export default function Admin() {
         <div className="stat hm"><small>قيمة الطلبات</small><b>{fmt(data.gmv)} ج.م</b></div>
       </div>
       <Link className="btn blk" href="/admin/products/new"><i className="ph ph-plus" />إضافة منتج جديد</Link>
+      <RefreshSite />
       <div className="menu">
         {MENU.map((x) => {
           const n = x.k ? (data as Record<string, number>)[x.k] : 0;
@@ -54,5 +59,24 @@ export default function Admin() {
         })}
       </div>
     </>
+  );
+}
+
+/** Visitors read a cached copy of the catalogue (saves Firebase reads). Edits refresh it within ~10 minutes; this button does it now. */
+function RefreshSite() {
+  const { user } = useApp();
+  const [msg, setMsg] = useState("");
+  const go = async () => {
+    if (!user) return;
+    setMsg("جاري التحديث…");
+    const w = await refreshCatalog(user, true);
+    setMsg(w === 0 ? "تم ✓ — الزوار هيشوفوا آخر التعديلات خلال دقايق." : w > 0 ? `اتحدّث من شوية — جرّب تاني بعد ${w} ثانية.` : "مقدرتش أحدّث، جرّب تاني.");
+  };
+  return (
+    <div className="card row wrap" style={{ gap: 10 }}>
+      <small className="sp mu">الزوار بيشوفوا نسخة محفوظة من المنتجات عشان نوفّر قراءات Firebase. تعديلاتك بتظهر لهم تلقائياً خلال حوالي 10 دقايق.</small>
+      <button className="btn o sm2" onClick={go}><i className="ph ph-arrows-clockwise" />حدّث الموقع للزوار دلوقتي</button>
+      {msg && <small className="ok">{msg}</small>}
+    </div>
   );
 }

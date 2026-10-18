@@ -2,6 +2,7 @@
 /* Product polish: studio photos (background removed → clean white square, sharper, better quality)
  * and professional AI copy. Originals are always kept (imagesOrig / nameOrig / descriptionOrig) so it can be undone. */
 import { doc, updateDoc, writeBatch } from "firebase/firestore";
+import { touchCatalog } from "./catalogClient";
 import type { User } from "firebase/auth";
 import { dbI } from "./firebase";
 import { uploadFromUrl } from "./img";
@@ -116,7 +117,7 @@ export async function enhanceMany(user: User, products: Product[], o: Opts, onSt
           const name = (x.name || p.name).slice(0, 90);
           const fields: Partial<Product> = { name, description: x.description, aiCopy: true, reviewed: false, keywords: kw(name, p.categoryName),
             ...(p.nameOrig === undefined ? { nameOrig: p.name, descriptionOrig: p.description || "" } : {}) };
-          try { await updateDoc(doc(dbI(), "products", p.id), fields); Object.assign(p, fields); onStep({ id: p.id, name, ok: true, note: `الاسم والوصف اتعادت صياغتهم${res?.provider ? ` (${res.provider})` : ""}` }); }
+          try { await updateDoc(doc(dbI(), "products", p.id), fields); touchCatalog(); Object.assign(p, fields); onStep({ id: p.id, name, ok: true, note: `الاسم والوصف اتعادت صياغتهم${res?.provider ? ` (${res.provider})` : ""}` }); }
           catch { onStep({ id: p.id, name: p.name, ok: false, note: "فشل حفظ الوصف" }); }
         }
         await sleep(4000); // each worker paces itself; with N providers that's N× faster overall
@@ -135,7 +136,7 @@ export async function enhanceMany(user: User, products: Product[], o: Opts, onSt
           const before = p.images?.[0];
           const f = await enhanceProductImages(p, o.images as "cover" | "all", !!o.cutout);
           if (!f) { onStep({ id: p.id, name: p.name, ok: true, note: "الصور متحسنة قبل كده" }); continue; }
-          await updateDoc(doc(dbI(), "products", p.id), { ...f, reviewed: false });
+          await updateDoc(doc(dbI(), "products", p.id), { ...f, reviewed: false }); touchCatalog();
           Object.assign(p, f);
           onStep({ id: p.id, name: p.name, ok: true, note: "الصور اتحسنت", before, after: f.images?.[0] });
         } catch (e) { onStep({ id: p.id, name: p.name, ok: false, note: `الصور: ${String((e as Error).message || e)}` }); }
@@ -152,7 +153,7 @@ export async function undoEnhance(p: Product, what: "images" | "text") {
   const f: Record<string, unknown> = {};
   if (what === "images" && p.imagesOrig) Object.assign(f, { images: p.imagesOrig, ...(p.mediaOrig ? { media: p.mediaOrig } : {}), studio: false });
   if (what === "text" && p.nameOrig !== undefined) Object.assign(f, { name: p.nameOrig, description: p.descriptionOrig || "", aiCopy: false });
-  if (Object.keys(f).length) await updateDoc(doc(dbI(), "products", p.id), f);
+  if (Object.keys(f).length) await updateDoc(doc(dbI(), "products", p.id), f); touchCatalog();
   return f;
 }
 
@@ -166,7 +167,7 @@ export async function restoreImagesMany(list: Product[], onDone?: (n: number) =>
       b.update(doc(dbI(), "products", p.id), { images: p.imagesOrig, ...(p.mediaOrig ? { media: p.mediaOrig } : {}), studio: false });
       n++;
     }
-    await b.commit();
+    await b.commit(); touchCatalog();
     onDone?.(n);
   }
   return n;
@@ -193,7 +194,7 @@ export async function applyStudio(p: Product, res: StudioResult) {
     ...(res.specs.length ? { aiCopy: false } : {}), // new specs → the next description rewrite will use them
     ...(p.imagesOrig ? {} : { imagesOrig: p.images || [], ...(p.media?.length ? { mediaOrig: p.media } : {}) }),
   };
-  await updateDoc(doc(dbI(), "products", p.id), f);
+  await updateDoc(doc(dbI(), "products", p.id), f); touchCatalog();
   return f;
 }
 
