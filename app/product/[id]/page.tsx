@@ -109,10 +109,20 @@ export default function ProductPage() {
           </Link>
         </div>
       </div>
-      <div className="grid mt2" style={st("--m:1;--d:2")}>
-        {p.description && <div className="card col"><h3>الوصف</h3><p style={{ whiteSpace: "pre-wrap" }}>{p.description}</p></div>}
-        {p.specs?.length > 0 && <div className="card col"><h3>المواصفات</h3><table className="tbl"><tbody>{p.specs.map((s, i) => <tr key={i}><td>{s.k}</td><td>{s.v}</td></tr>)}</tbody></table></div>}
-      </div>
+      {(() => {
+        // specs that the description already lists add nothing → hide them; no specs left → no specs card, description takes the full width
+        const flat = (x: string) => x.replace(/[\s:•\-–]/g, "").toLowerCase();
+        const desc = flat(p.description || "");
+        const specs = (p.specs || []).filter((s) => s.k.trim() && s.v.trim() && !(desc.includes(flat(s.v)) && desc.includes(flat(s.k))));
+        const both = !!p.description && specs.length > 0;
+        if (!p.description && !specs.length) return null;
+        return (
+          <div className="grid mt2" style={st(both ? "--m:1;--d:2" : "--m:1;--d:1")}>
+            {p.description && <div className="card col"><h3>الوصف</h3><p style={{ whiteSpace: "pre-wrap" }}>{p.description}</p></div>}
+            {specs.length > 0 && <div className="card col"><h3>المواصفات</h3><table className="tbl"><tbody>{specs.map((s, i) => <tr key={i}><td>{s.k}</td><td>{s.v}</td></tr>)}</tbody></table></div>}
+          </div>
+        );
+      })()}
       {(data?.similar.length ?? 0) > 0 && <div className="sec mt2"><h2>منتجات مشابهة</h2><div className="grid" style={st("--m:2;--d:4")}>{data!.similar.map((x) => <ProductCard key={x.id} p={x} />)}</div></div>}
       <div className="mt2"><Recommended title="ممكن يعجبك كمان" exclude={[p.id, ...(data?.similar ?? []).map((x) => x.id)]} boostCat={p.categoryId} n={8} cols={4} /></div>
     </div>
