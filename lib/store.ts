@@ -4,6 +4,16 @@ import { DEFAULT_SETTINGS } from "./config";
 import { ms } from "./format";
 import type { Category, Merchant, Product, Settings } from "./types";
 
+/** Is the product in this category (its main one or one of its extra ones)? */
+export const inCat = (p: Pick<Product, "categoryId" | "extraCats">, cat: string) => p.categoryId === cat || !!p.extraCats?.includes(cat);
+/** Products whose EXTRA categories include `cat` (main-category ones come from the normal queries). Equality + array-contains → no index needed. */
+async function extraIn(cat: string, n: number): Promise<Product[]> {
+  try {
+    const s = await getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where("extraCats", "array-contains", cat), limit(n)));
+    return s.docs.map((d) => withId<Product>(d)).filter((p) => p.categoryId !== cat);
+  } catch { return []; }
+}
+
 export const withId = <T,>(d: { id: string; data: () => unknown }) => ({ id: d.id, ...(d.data() as object) }) as T;
 const newest = <T extends { createdAt?: { seconds: number } }>(a: T[]) => [...a].sort((x, y) => ms(y.createdAt) - ms(x.createdAt));
 
@@ -63,20 +73,20 @@ export async function pageActiveProducts(size: number, opts: { cat?: string; aft
   const base = [where("status", "==", "active"), ...(opts.cat ? [where("categoryId", "==", opts.cat)] : [])];
   try {
     const q = query(collection(dbI(), "products"), ...base, orderBy("createdAt", "desc"), ...(opts.after ? [startAfter(opts.after)] : []), limit(size + 1));
-    const s = await getDocs(q);
+    const [s, extra] = await Promise.all([getDocs(q), opts.cat && !opts.after ? extraIn(opts.cat, 60) : Promise.resolve([] as Product[])]);
     const docs = s.docs.slice(0, size);
-    return { items: docs.map((d) => withId<Product>(d)), cursor: docs[docs.length - 1] ?? null, more: s.docs.length > size };
+    return { items: [...docs.map((d) => withId<Product>(d)), ...extra], cursor: docs[docs.length - 1] ?? null, more: s.docs.length > size };
   } catch (e) {
     missingIndex(e);
-    const all = (await allActiveProductsCached()).filter((p) => !opts.cat || p.categoryId === opts.cat);
+    const all = (await allActiveProductsCached()).filter((p) => !opts.cat || inCat(p, opts.cat));
     return { items: opts.after ? [] : all, cursor: null, more: false };
   }
 }
 
 /** A few products from the same category (product page "similar", categories page preview). Equality filters only → no index needed. */
 export async function sampleCategory(cat: string, n: number, exclude = ""): Promise<Product[]> {
-  const s = await getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where("categoryId", "==", cat), limit(n + 1)));
-  return s.docs.map((d) => withId<Product>(d)).filter((p) => p.id !== exclude).slice(0, n);
+  const [s, extra] = await Promise.all([getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where("categoryId", "==", cat), limit(n + 1))), extraIn(cat, n)]);
+  return [...s.docs.map((d) => withId<Product>(d)), ...extra].filter((p) => p.id !== exclude).slice(0, n);
 }
 
 /** Specific products by id (favourites), 30 per query. */

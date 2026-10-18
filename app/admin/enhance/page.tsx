@@ -27,7 +27,7 @@ export default function EnhancePage() {
   const [sel, setSel] = useState<string[]>([]);
   const shown = useMemo(() => {
     const n = norm(q);
-    return all.filter((p) => (!cat || p.categoryId === cat) && (!n || norm(p.name).includes(n))
+    return all.filter((p) => (!cat || p.categoryId === cat || !!p.extraCats?.includes(cat)) && (!n || norm(p.name).includes(n))
       && (flt === "all" || (flt === "noimg" && !p.studio) || (flt === "notext" && !p.aiCopy) || (flt === "pending" && p.status === "pending")));
   }, [all, cat, flt, q]);
   const chosen = all.filter((p) => sel.includes(p.id));
@@ -99,12 +99,13 @@ export default function EnhancePage() {
 
   // ---- descriptions
   const [names, setNames] = useState(true);
+  const [web, setWeb] = useState(true);
   const [log, setLog] = useState<Step[]>([]);
   const runText = async () => {
     if (!user || !chosen.length) return;
     stopRef.current = false; setRunning("text"); setLog([]);
     const list = chosen.map((p) => ({ ...p, aiCopy: false })); // re-do even if done before (user chose them)
-    await enhanceMany(user, list, { images: "none", text: true, names }, (s) => setLog((l) => [s, ...l].slice(0, 300)), () => stopRef.current);
+    await enhanceMany(user, list, { images: "none", text: true, names, web }, (s) => setLog((l) => [s, ...l].slice(0, 300)), () => stopRef.current);
     setRunning(""); reload();
   };
 
@@ -171,6 +172,7 @@ export default function EnhancePage() {
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>الأوصاف:</b>
           <label className="chk"><input type="checkbox" checked={names} onChange={(e) => setNames(e.target.checked)} />وتحسين الاسم كمان</label>
+          <label className="chk"><input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} />ابحث في الويب عن تفاصيل المنتج (أدق وأكمل، بس أبطأ)</label>
           <span className="sp" />
           <button className="btn" disabled={!!running || !sel.length} onClick={runText}><i className="ph ph-text-aa" />أعد صياغة الوصف ({sel.length})</button>
         </div>

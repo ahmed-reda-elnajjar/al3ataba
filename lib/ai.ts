@@ -34,6 +34,49 @@ async function claude(text: string) {
   return String(j?.content?.map((c: { text?: string }) => c.text || "").join("") || "");
 }
 
+/* ---- providers that can SEARCH THE WEB before answering (used for richer product descriptions) ---- */
+/** Meta Model API — Responses API with the built-in web_search tool. */
+async function metaWeb(key: string, model: string, text: string) {
+  const r = await fetch("https://api.meta.ai/v1/responses", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, input: text, tools: [{ type: "web_search", search_context_size: "medium" }] }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw err(j?.error?.message || j?.message || `Meta HTTP ${r.status}`, r.status);
+  if (typeof j.output_text === "string" && j.output_text) return j.output_text;
+  type Item = { type?: string; content?: { type?: string; text?: string }[] };
+  return ((j.output || []) as Item[]).filter((i) => i.type === "message").flatMap((i) => i.content || []).map((c) => c.text || "").join("");
+}
+/** Gemini with Google Search grounding (JSON mode can't be combined with tools, so we parse the text). */
+async function geminiWeb(model: string, text: string) {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0.3 } }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw err(j?.error?.message || `Gemini HTTP ${r.status}`, r.status);
+  return String(j?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "");
+}
+/** Groq "compound" system — searches the web on its own inside a normal chat call. */
+async function groqWeb(key: string, model: string, text: string) {
+  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, temperature: 0.3, messages: [{ role: "user", content: text }] }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw err(j?.error?.message || `Groq HTTP ${r.status}`, r.status);
+  return String(j?.choices?.[0]?.message?.content || "");
+}
+
+export function webProviders(): Provider[] {
+  const e = process.env, list: Provider[] = [];
+  const metaKey = e.META_API_KEY || e.LLAMA_API_KEY;
+  if (metaKey) list.push({ name: "Meta + بحث", run: (t) => metaWeb(metaKey, e.META_MODEL || e.LLAMA_MODEL || "muse-spark-1.3", t) });
+  if (e.GEMINI_API_KEY) list.push({ name: "Gemini + بحث جوجل", run: (t) => geminiWeb(e.GEMINI_WEB_MODEL || "gemini-flash-latest", t) });
+  if (e.GROQ_API_KEY) list.push({ name: "Groq + بحث", run: (t) => groqWeb(e.GROQ_API_KEY!, e.GROQ_WEB_MODEL || "groq/compound", t) });
+  return list;
+}
+
 export function providers(): Provider[] {
   const e = process.env, list: Provider[] = [];
   if (e.GEMINI_API_KEY) for (const m of Array.from(new Set([e.GEMINI_MODEL || "gemini-flash-lite-latest", "gemini-flash-latest"]))) list.push({ name: `Gemini (${m})`, run: (t) => geminiOne(m, t) });
@@ -50,8 +93,9 @@ export function providers(): Provider[] {
 // remember which providers were out of quota recently, so we don't hit them on every request
 const coolUntil: Record<string, number> = {};
 
-export async function aiGenerate<T>(text: string, parse: (t: string) => T[], prefer?: string): Promise<{ out: T[]; provider: string }> {
-  const all = providers();
+export async function aiGenerate<T>(text: string, parse: (t: string) => T[], prefer?: string, web = false): Promise<{ out: T[]; provider: string }> {
+  // web mode: search-capable providers first, then the normal ones as a last resort (they just use the data we have)
+  const all = web ? [...webProviders(), ...providers()] : providers();
   const ready = all.filter((p) => !(coolUntil[p.name] > Date.now()));
   const base = ready.length ? ready : all;
   // the caller's preferred provider goes first (parallel workers each pin one), the rest are the fallback chain

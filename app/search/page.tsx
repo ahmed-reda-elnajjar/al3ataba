@@ -56,7 +56,7 @@ function Results() {
     let a = items.filter((p) => {
       const hay = norm(`${p.name} ${p.description} ${p.categoryName} ${p.merchantName} ${(p.keywords || []).join(" ")}`);
       if (terms.some((t) => !hay.includes(t))) return false;
-      if (cat && p.categoryId !== cat) return false;
+      if (cat && p.categoryId !== cat && !p.extraCats?.includes(cat)) return false;
       if (gov && p.governorate !== gov) return false;
       const [lo, hi] = priceRange(p);
       if (min && hi < Number(min)) return false;

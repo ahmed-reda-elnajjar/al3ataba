@@ -3,6 +3,7 @@ export type Spec = { k: string; v: string };
 export type PStatus = "active" | "pending" | "hidden";
 export type Product = {
   id: string; name: string; description: string; categoryId: string; categoryName: string;
+  extraCats?: string[]; // more categories the product also shows in (categoryId stays the main one)
   unit: string; moq: number; tiers: Tier[]; governorate: string;
   merchantId: string; merchantName: string; ownerUid: string;
   images: string[]; videos?: string[]; media?: string[]; specs: Spec[]; colors: string[];

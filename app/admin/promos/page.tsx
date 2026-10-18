@@ -41,7 +41,7 @@ export default function AdminPromos() {
   const affected = useMemo(() => {
     if (!d) return 0;
     if (d.scope === "all") return products.length;
-    return d.scope === "category" ? products.filter((p) => d.categoryIds.includes(p.categoryId)).length : d.productIds.length;
+    return d.scope === "category" ? products.filter((p) => d.categoryIds.includes(p.categoryId) || p.extraCats?.some((c) => d.categoryIds.includes(c))).length : d.productIds.length;
   }, [d, products]);
 
   const pickImg = async (f?: File) => {

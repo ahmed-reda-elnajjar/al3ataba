@@ -42,7 +42,7 @@ export async function enhanceImage(url: string, cutout = false): Promise<string>
   return uploadFromUrl(s, "al3ataba/studio");    // bake the result into a new image
 }
 
-export type Opts = { images: "none" | "cover" | "all"; text: boolean; names: boolean; cutout?: boolean };
+export type Opts = { images: "none" | "cover" | "all"; text: boolean; names: boolean; cutout?: boolean; web?: boolean };
 export type Step = { id: string; name: string; ok: boolean; note: string; before?: string; after?: string };
 
 /** Studio photos for one product. Returns the fields to save (or null if nothing changed). */
@@ -62,17 +62,17 @@ export async function enhanceProductImages(p: Product, which: "cover" | "all", c
 }
 
 /** Configured AI providers (names only). */
-export async function listProviders(user: User): Promise<string[]> {
+export async function listProviders(user: User, web = false): Promise<string[]> {
   const r = await fetch("/api/ai-product", { headers: { "x-firebase-token": await user.getIdToken() } }).catch(() => null);
   const j = r?.ok ? await r.json() : {};
-  return Array.isArray(j.providers) ? j.providers : [];
+  return (web && Array.isArray(j.web) && j.web.length ? j.web : Array.isArray(j.providers) ? j.providers : []) as string[];
 }
 
 /** Ask the server to rewrite up to 5 products at once (prefer = provider this worker pins; others are the fallback). */
-export async function rewriteText(user: User, list: Product[], names: boolean, prefer?: string) {
+export async function rewriteText(user: User, list: Product[], names: boolean, prefer?: string, web = false) {
   const r = await fetch("/api/ai-product", {
     method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() },
-    body: JSON.stringify({ names, prefer, items: list.map((p) => ({ id: p.id, name: p.name, category: p.categoryName, description: p.description, specs: (p.specs || []).map((s) => `${s.k}: ${s.v}`).join(" | "), colors: (p.colors || []).join("، "), unit: p.unit, moq: p.moq, packSize: p.packSize })) }),
+    body: JSON.stringify({ names, prefer, web, items: list.map((p) => ({ id: p.id, name: p.name, category: p.categoryName, description: web && p.descriptionOrig ? p.descriptionOrig : p.description, specs: (p.specs || []).map((s) => `${s.k}: ${s.v}`).join(" | "), colors: (p.colors || []).join("، "), unit: p.unit, moq: p.moq, packSize: p.packSize })) }),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j.error || `HTTP ${r.status}`), { status: r.status });
@@ -90,11 +90,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function enhanceMany(user: User, products: Product[], o: Opts, onStep: (s: Step) => void, stop: () => boolean) {
   const textJob = async () => {
     if (!o.text) return;
-    const todo = products.filter((p) => !p.aiCopy);
+    const todo = o.web ? products : products.filter((p) => !p.aiCopy); // web research can improve ones already rewritten
     const queue: Product[][] = [];
-    for (let i = 0; i < todo.length; i += 5) queue.push(todo.slice(i, i + 5));
+    const per = o.web ? 2 : 5; // web research is slower → smaller batches
+    for (let i = 0; i < todo.length; i += per) queue.push(todo.slice(i, i + per));
     if (!queue.length) return;
-    const names = await listProviders(user);
+    const names = await listProviders(user, !!o.web);
     const workers = names.length ? names : [""];
     let broken = false;
     const work = async (prefer: string) => {
@@ -102,7 +103,7 @@ export async function enhanceMany(user: User, products: Product[], o: Opts, onSt
         const batch = queue.shift()!;
         let res: Awaited<ReturnType<typeof rewriteText>> | null = null;
         for (let attempt = 0; attempt < 3 && !res; attempt++) {
-          try { res = await rewriteText(user, batch, o.names, prefer || undefined); }
+          try { res = await rewriteText(user, batch, o.names, prefer || undefined, !!o.web); }
           catch (e) {
             const st = (e as { status?: number }).status, m = String((e as Error).message);
             if (st === 401 || (st === 500 && /مفتاح|API_KEY/.test(m))) { broken = true; batch.forEach((p) => onStep({ id: p.id, name: p.name, ok: false, note: `الوصف: ${m}` })); return; }

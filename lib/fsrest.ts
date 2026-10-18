@@ -40,15 +40,24 @@ export async function restCategories() {
   const docs: { name: string; fields?: Record<string, V>; updateTime?: string }[] = (await r.json()).documents || [];
   return docs.map((d) => fromDoc<Category>(d) as C).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
-/** Active products (optionally one category). Equality filters only → no index needed. */
+/** Active products (optionally one category — its main products plus ones that list it in extraCats). Equality / array-contains only → no index needed. */
 export async function restProducts(opts: { cat?: string; limit?: number } = {}) {
-  const filters = [{ fieldFilter: { field: { fieldPath: "status" }, op: "EQUAL", value: { stringValue: "active" } } }];
-  if (opts.cat) filters.push({ fieldFilter: { field: { fieldPath: "categoryId" }, op: "EQUAL", value: { stringValue: opts.cat } } });
-  const body = { structuredQuery: { from: [{ collectionId: "products" }], where: filters.length > 1 ? { compositeFilter: { op: "AND", filters } } : filters[0], limit: opts.limit ?? 2000 } };
-  const r = await fetch(`${ROOT}:runQuery?key=${KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), ...REV }).catch(() => null);
-  if (!r?.ok) return [] as (Product & { _updated?: string })[];
-  const rows: { document?: { name: string; fields?: Record<string, V>; updateTime?: string } }[] = await r.json();
-  return rows.filter((x) => x.document).map((x) => fromDoc<Product>(x.document!));
+  const run = async (extra?: { fieldFilter: unknown }) => {
+    const filters: unknown[] = [{ fieldFilter: { field: { fieldPath: "status" }, op: "EQUAL", value: { stringValue: "active" } } }];
+    if (extra) filters.push(extra);
+    const body = { structuredQuery: { from: [{ collectionId: "products" }], where: filters.length > 1 ? { compositeFilter: { op: "AND", filters } } : filters[0], limit: opts.limit ?? 2000 } };
+    const r = await fetch(`${ROOT}:runQuery?key=${KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), ...REV }).catch(() => null);
+    if (!r?.ok) return [] as (Product & { _updated?: string })[];
+    const rows: { document?: { name: string; fields?: Record<string, V>; updateTime?: string } }[] = await r.json();
+    return rows.filter((x) => x.document).map((x) => fromDoc<Product>(x.document!));
+  };
+  if (!opts.cat) return run();
+  const [main, more] = await Promise.all([
+    run({ fieldFilter: { field: { fieldPath: "categoryId" }, op: "EQUAL", value: { stringValue: opts.cat } } }),
+    run({ fieldFilter: { field: { fieldPath: "extraCats" }, op: "ARRAY_CONTAINS", value: { stringValue: opts.cat } } }),
+  ]);
+  const seen = new Set(main.map((p) => p.id));
+  return [...main, ...more.filter((p) => !seen.has(p.id))];
 }
 
 export const minPrice = (p: Product) => (p.tiers?.length ? Math.min(...p.tiers.map((t) => t.price)) : 0);

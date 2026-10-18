@@ -38,6 +38,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [name, setName] = useState(p?.name ?? "");
   const [description, setDescription] = useState(p?.description ?? "");
   const [categoryId, setCategoryId] = useState(p?.categoryId ?? "");
+  const [extraCats, setExtraCats] = useState<string[]>(p?.extraCats ?? []);
   const [unit, setUnit] = useState(p?.unit ?? "قطعة");
   const [moq, setMoq] = useState(String(p?.moq ?? 1));
   const [pack, setPack] = useState(p?.packSize ? String(p.packSize) : "");
@@ -121,6 +122,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     const owner = isAdmin && !p ? HOUSE : p ? { id: p.merchantId, name: p.merchantName } : { id: user, name: merchant?.name ?? "" };
     const data = {
       name: name.trim(), description: description.trim(), categoryId, categoryName: cat?.name ?? "",
+      extraCats: extraCats.filter((x) => x !== categoryId && cats.some((c) => c.id === x)),
       unit, moq: m, tiers: t.sort((a, b) => a.min - b.min), governorate, packSize: packN > 1 ? packN : null,
       // prices typed by hand become the new "original" price for future % markups
       ...(fromMarkup && Number(base) > 0 && JSON.stringify(t.map((x) => [x.min, x.price])) === JSON.stringify(tiersFromMarkup(Number(base), mt).map((x) => [x.min, x.price]))
@@ -176,6 +178,11 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         <div className="fld"><label>وحدة البيع</label><select className="in" value={unit} onChange={(e) => setUnit(e.target.value)}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select></div>
         <div className="fld"><label>أقل كمية للطلب</label><input className="in" inputMode="numeric" value={moq} onChange={(e) => setMoq(e.target.value.replace(/\D/g, ""))} /></div>
       </div>
+      {categoryId && cats.length > 1 && (
+        <div className="fld"><label>يظهر كمان في أقسام تانية <small>(اختياري — القسم اللي فوق هو الأساسي)</small></label>
+          <div className="row wrap g4">{cats.filter((c) => c.id !== categoryId).map((c) => { const on = extraCats.includes(c.id); return <button key={c.id} type="button" className={`chip${on ? " on" : ""}`} onClick={() => setExtraCats(on ? extraCats.filter((x) => x !== c.id) : [...extraCats, c.id])}>{on && <i className="ph ph-check" />} {c.name}</button>; })}</div>
+        </div>
+      )}
       {unit !== "قطعة" && (
         <div className="fld" style={{ maxWidth: 360 }}><label>عدد القطع في ال{unit} الواحدة <small>(مثال: شريحة فيها 435 جراب)</small></label>
           <input className="in" inputMode="numeric" value={pack} placeholder="اختياري" onChange={(e) => setPack(e.target.value.replace(/\D/g, ""))} />

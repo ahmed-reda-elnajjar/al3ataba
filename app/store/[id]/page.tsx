@@ -24,7 +24,7 @@ export default function Store() {
   const name = m?.name || HOUSE.name;
   const products = data?.products ?? [];
   const cats = Array.from(new Map(products.map((p) => [p.categoryId, p.categoryName])).entries());
-  const shown = products.filter((p) => !cat || p.categoryId === cat);
+  const shown = products.filter((p) => !cat || p.categoryId === cat || !!p.extraCats?.includes(cat));
   return (
     <div className="wc">
       <div className="sthead">

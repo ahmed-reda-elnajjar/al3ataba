@@ -2,10 +2,10 @@
 import { sized } from "@/lib/media";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { collection, deleteDoc, doc, getDocs, limit, query, updateDoc, writeBatch } from "firebase/firestore";
+import { arrayRemove, arrayUnion, collection, deleteDoc, doc, getDocs, limit, query, updateDoc, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useAsync } from "@/lib/hooks";
-import { withId } from "@/lib/store";
+import { listCategories, withId } from "@/lib/store";
 import { ms } from "@/lib/format";
 import { Empty, Status } from "@/components/Ui";
 import { DEFAULT_RULES, rangeText, tiersFromRules, type PriceRule } from "@/lib/pricing";
@@ -41,6 +41,19 @@ export default function AdminProducts() {
   const [sel, setSel] = useState<string[]>([]); // selected product ids
   const [assignTo, setAssignTo] = useState("");
   const [amsg, setAmsg] = useState("");
+  const catsQ = useAsync(() => listCategories(), []);
+  const [catTo, setCatTo] = useState("");
+  const [cmsg, setCmsg] = useState("");
+  /** add/remove an extra category on every selected product (their main category stays as is) */
+  const extraCat = async (add: boolean) => {
+    if (!sel.length) return setCmsg("علّم على المنتجات الأول.");
+    if (!catTo) return setCmsg("اختار القسم.");
+    let b = writeBatch(dbI()), k = 0;
+    for (const pid of sel) { b.update(doc(dbI(), "products", pid), { extraCats: add ? arrayUnion(catTo) : arrayRemove(catTo) }); if (++k % 400 === 0) { await b.commit(); b = writeBatch(dbI()); } }
+    await b.commit();
+    const n = catsQ.data?.find((c) => c.id === catTo)?.name || "";
+    setCmsg(add ? `تم: ${sel.length} منتج بقوا بيظهروا كمان في "${n}".` : `تم: اتشال "${n}" من ${sel.length} منتج.`); setSel([]); reload();
+  };
   const newSupplier = async () => {
     const n = prompt("اسم المورد (بيظهر للإدارة بس):")?.trim();
     if (!n) return null;
@@ -148,6 +161,19 @@ export default function AdminProducts() {
           <button className="btn" onClick={assign} disabled={!sel.length}>ربط</button>
         </div>
         {amsg && <span className="ok">{amsg}</span>}
+      </div>
+      <div className="card col" style={{ gap: 10 }}>
+        <b>إضافة المنتجات لقسم تاني <small>(المنتج بيفضل في قسمه الأساسي وبيظهر كمان في القسم ده)</small></b>
+        <div className="row wrap">
+          <span className="sp"><b>{sel.length}</b> متعلّم</span>
+          <select className="in" style={{ maxWidth: 220 }} value={catTo} onChange={(e) => setCatTo(e.target.value)}>
+            <option value="">اختار القسم…</option>
+            {catsQ.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button className="btn" onClick={() => extraCat(true)} disabled={!sel.length}>أضف للقسم</button>
+          <button className="btn o" onClick={() => extraCat(false)} disabled={!sel.length}>شيل من القسم</button>
+        </div>
+        {cmsg && <span className="ok">{cmsg}</span>}
       </div>
       <details className="card">
         <summary style={{ cursor: "pointer", fontWeight: 700 }}>زيادة / تعديل الأسعار بنسبة %</summary>
