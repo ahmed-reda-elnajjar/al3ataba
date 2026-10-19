@@ -39,6 +39,8 @@ function slim(p: Product & { _updated?: string }): Product {
   return {
     id: p.id, name: p.name, description: short(p.description, 120), categoryId: p.categoryId, categoryName: p.categoryName,
     ...(p.extraCats?.length ? { extraCats: p.extraCats } : {}),
+    ...(p.resellOff ? { resellOff: true } : {}), ...(p.resellMode ? { resellMode: p.resellMode } : {}),
+    ...(typeof p.resellCommission === "number" ? { resellCommission: p.resellCommission } : {}),
     unit: p.unit, moq: p.moq, tiers: p.tiers || [], governorate: p.governorate || "",
     merchantId: p.merchantId, merchantName: p.merchantName, ownerUid: "",
     images, ...(media.length ? { media } : {}), specs: [], colors: (p.colors || []).slice(0, 8),
@@ -98,7 +100,7 @@ async function buildFromFirebase(): Promise<Catalog> {
     products: prods.map((d) => slim(fromDoc<Product>(d))).sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)),
     categories: cats.map((d) => fromDoc<Category>(d)).map(({ id, name, icon, order, image, parentId }) => ({ id, name, icon, order, ...(image ? { image } : {}), ...(parentId ? { parentId } : {}) }) as Category).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     // public settings only (markup rules and supplier import links stay private)
-    settings: { shippingPerMerchant: s.shippingPerMerchant, whatsapp: s.whatsapp, supportPhone: s.supportPhone, paymentInstructions: s.paymentInstructions, announcement: s.announcement, heroTitle: s.heroTitle, heroSub: s.heroSub, heroImage: s.heroImage, city: s.city },
+    settings: { shippingPerMerchant: s.shippingPerMerchant, whatsapp: s.whatsapp, supportPhone: s.supportPhone, paymentInstructions: s.paymentInstructions, announcement: s.announcement, heroTitle: s.heroTitle, heroSub: s.heroSub, heroImage: s.heroImage, city: s.city, resell: s.resell },
     promos: promos.map((d) => { const x = fromDoc<Promo & { _updated?: string }>(d); delete x._updated; return x as Promo; }).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     merchants: merchants.map((d) => fromDoc<Merchant>(d)).map((m) => ({ id: m.id, name: m.name, type: m.type, governorate: m.governorate, city: m.city, about: short(m.about, 300), status: m.status, verified: !!m.verified, plan: m.plan, phone: "", ownerUid: "", createdAt: m.createdAt }) as Merchant),
   });

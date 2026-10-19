@@ -4,6 +4,7 @@ export type PStatus = "active" | "pending" | "hidden";
 export type Product = {
   id: string; name: string; description: string; categoryId: string; categoryName: string;
   extraCats?: string[]; // more categories the product also shows in (categoryId stays the main one)
+  resellOff?: boolean; resellMode?: "both" | "retail" | "wholesale"; resellCommission?: number | null; // selling on commission (resellers)
   unit: string; moq: number; tiers: Tier[]; governorate: string;
   merchantId: string; merchantName: string; ownerUid: string;
   images: string[]; videos?: string[]; media?: string[]; specs: Spec[]; colors: string[];
@@ -58,4 +59,5 @@ export type Settings = {
   heroTitle: string; heroSub: string; heroImage: string; city: string;
   markupRules?: { from: number; tiers: { min: number; pct: number }[] }[];
   importSources?: { name: string; url: string; supplierId?: string }[];
+  resell?: import("./resell").ResellSettings;
 };

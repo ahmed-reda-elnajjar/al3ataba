@@ -57,6 +57,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
             <L href="/offers" ic="ph-tag" t="العروض" />
             <L href="/suppliers" ic="ph-storefront" t="التجار والمصانع" />
             <L href="/rfq" ic="ph-clipboard-text" t="طلب منتج / عرض سعر" />
+            <L href="/resell" ic="ph-hand-coins" t="البيع بالعمولة" />
             <L href="/cart" ic="ph-shopping-cart" t="السلة" />
             <L href={loggedIn ? "/account" : "/login"} ic="ph-user" t={loggedIn ? "حسابي" : "تسجيل الدخول"} />
             {merchant?.status === "approved" ? <L href="/merchant" ic="ph-storefront" t="لوحة التاجر" /> : <L href="/sell" ic="ph-handshake" t="بيع معانا" />}

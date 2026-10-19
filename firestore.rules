@@ -47,6 +47,28 @@ service cloud.firestore {
       allow delete: if isAdmin() || (realUser() && resource.data.merchantId == request.auth.uid);
     }
 
+    // ---- selling on commission ----
+    // reseller profile: the user applies (pending); only the admin approves/suspends
+    match /resellers/{uid} {
+      allow read: if isAdmin() || (realUser() && request.auth.uid == uid);
+      allow create: if realUser() && request.auth.uid == uid
+        && request.resource.data.uid == uid && request.resource.data.status == 'pending';
+      allow update: if isAdmin()
+        || (realUser() && request.auth.uid == uid && only(['name', 'phone', 'governorate', 'payMethod', 'payNumber']));
+      allow delete: if isAdmin();
+    }
+    // reseller orders + withdrawals are created by the server (prices/balances checked there); the admin updates them
+    match /rorders/{id} {
+      allow read: if isAdmin() || (realUser() && resource.data.resellerId == request.auth.uid);
+      allow create: if false;
+      allow update, delete: if isAdmin();
+    }
+    match /payouts/{id} {
+      allow read: if isAdmin() || (realUser() && resource.data.resellerId == request.auth.uid);
+      allow create: if false;
+      allow update, delete: if isAdmin();
+    }
+
     match /merchants/{uid} {
       allow read: if resource.data.status == 'approved' || isAdmin() || (signedIn() && request.auth.uid == uid);
       allow create: if realUser() && request.auth.uid == uid

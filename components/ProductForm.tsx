@@ -73,6 +73,9 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [cod, setCod] = useState(p?.cod ?? true);
   const [made, setMade] = useState(p?.madeInEgypt ?? true);
   const [logo, setLogo] = useState(p?.logoPrint ?? false);
+  const [rOff, setROff] = useState(!!p?.resellOff);
+  const [rMode, setRMode] = useState<"both" | "retail" | "wholesale">(p?.resellMode || "both");
+  const [rCom, setRCom] = useState(typeof p?.resellCommission === "number" ? String(p.resellCommission) : "");
   const [status, setStatus] = useState<Product["status"]>(p?.status ?? "active");
   const [supplierId, setSupplierId] = useState(p?.supplierId ?? "");
   const sups = useAsync(async () => (isAdmin ? listSuppliers() : []), [isAdmin]);
@@ -133,6 +136,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         : p && JSON.stringify(t.map((x) => [x.min, x.price])) !== JSON.stringify((p.tiers ?? []).map((x) => [x.min, x.price])) ? { basePrices: null, markup: null, markupTiers: null } : {}),
       media, images: images.length ? images : [videoPoster(videos[0])], videos, colors: colorIn.trim() && !colors.includes(colorIn.trim()) ? [...colors, colorIn.trim()] : colors,
       specs: specs.filter((s) => s.k.trim() && s.v.trim()), cod, madeInEgypt: made, logoPrint: logo,
+      ...(isAdmin ? { resellOff: rOff, resellMode: rMode, resellCommission: rCom.trim() === "" ? null : Math.max(0, Math.round(Number(rCom) || 0)) } : {}),
       status: isAdmin ? status : (p?.status ?? "active"),
       ...(isAdmin ? { supplierId: supplierId || null } : {}),
       keywords: Array.from(new Set(`${name} ${cat?.name ?? ""}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
@@ -249,6 +253,18 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         <label className="chk"><input type="checkbox" checked={cod} onChange={(e) => setCod(e.target.checked)} />الدفع عند الاستلام متاح</label>
         <label className="chk"><input type="checkbox" checked={made} onChange={(e) => setMade(e.target.checked)} />صناعة مصرية</label>
         <label className="chk"><input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} />طباعة لوجو</label>
+        {isAdmin && (
+          <div className="card col" style={{ gap: 8, width: "100%", background: "var(--cream)" }}>
+            <b style={{ fontSize: 14 }}>البيع بالعمولة</b>
+            <label className="chk"><input type="checkbox" checked={!rOff} onChange={(e) => setROff(!e.target.checked)} />متاح للبائعين بالعمولة</label>
+            {!rOff && (
+              <div className="row wrap" style={{ gap: 8 }}>
+                <div className="fld" style={{ width: 170 }}><label>يتباع</label><select className="in" value={rMode} onChange={(e) => setRMode(e.target.value as typeof rMode)}><option value="both">قطاعي وجملة</option><option value="retail">قطاعي بس</option><option value="wholesale">جملة بس (من أقل كمية)</option></select></div>
+                <div className="fld" style={{ width: 200 }}><label>العمولة الافتراضية / قطعة</label><input className="in" inputMode="numeric" placeholder="فاضي = عمولة القسم" value={rCom} onChange={(e) => setRCom(e.target.value.replace(/\D/g, ""))} /></div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {isAdmin && (sups.data?.length ?? 0) > 0 && <div className="fld" style={{ maxWidth: 240 }}><label>المورد (للإدارة بس)</label><select className="in" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">بدون</option>{sups.data!.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
       {isAdmin && <div className="fld" style={{ maxWidth: 240 }}><label>الحالة</label><select className="in" value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}><option value="active">منشور</option><option value="pending">قيد المراجعة</option><option value="hidden">مخفي</option></select></div>}

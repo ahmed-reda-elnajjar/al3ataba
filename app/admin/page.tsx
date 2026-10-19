@@ -16,6 +16,7 @@ const MENU = [
   { href: "/admin/categories", t: "الأقسام وترتيبها", ic: "ph-list-numbers", k: "" },
   { href: "/admin/enhance", t: "تحسين الصور والأوصاف (خلفية بيضا + وصف احترافي)", ic: "ph-magic-wand", k: "" },
   { href: "/admin/promos", t: "العروض والخصومات على الأقسام والمنتجات", ic: "ph-tag", k: "" },
+  { href: "/admin/resell", t: "البيع بالعمولة (البائعين وطلباتهم والسحب)", ic: "ph-hand-coins", k: "" },
   { href: "/admin/import", t: "استيراد منتجات من تليجرام", ic: "ph-telegram-logo", k: "" },
   { href: "/admin/import-site", t: "استيراد منتجات من موقع تاجر", ic: "ph-globe", k: "" },
   { href: "/admin/rfqs", t: "طلبات عروض الأسعار", ic: "ph-clipboard-text", k: "rfqs" },
