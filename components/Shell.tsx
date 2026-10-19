@@ -141,6 +141,7 @@ export function Header() {
         <Link href="/cart" className="hico sm" aria-label="السلة"><i className="ph ph-shopping-cart-simple" />{count > 0 && <span className="cnt">{count}</span>}</Link>
         <nav className="nav hm">
           {panel ? <Link href={panel.href} className="nl"><i className={`ph ${panel.ic}`} />{panel.t}</Link> : <Link href="/sell" className="nl"><i className="ph ph-storefront" />بيع معانا</Link>}
+          <Link href="/resell" className="nl"><i className="ph ph-hand-coins" />البيع بالعمولة</Link>
           <Link href="/rfq" className="nl"><i className="ph ph-clipboard-text" />طلب منتج</Link>
           <Link href="/cart" className="nl"><i className="ph ph-shopping-cart" />{count > 0 && <span className="cnt">{count}</span>}السلة</Link>
           <Link href={loggedIn ? "/account" : "/login"} className="nl"><i className="ph ph-user" />{loggedIn ? "حسابي" : "دخول"}</Link>
@@ -164,7 +165,7 @@ export function Footer() {
           <span>من كل أسواق مصر .. في مكان واحد. منصة تجارة جملة بين البائع والمشتري.</span>
           <b style={{ color: "var(--gold2)", fontFamily: "Alexandria" }}>مش مجرد متجر .. ده أسواق مصر</b>
         </div>
-        <div className="col g4"><b>العتبة</b><Link href="/categories">الأقسام</Link><Link href="/suppliers">التجار</Link><Link href="/sell">سجّل كتاجر</Link><Link href="/rfq">اطلب عرض سعر</Link></div>
+        <div className="col g4"><b>العتبة</b><Link href="/categories">الأقسام</Link><Link href="/suppliers">التجار</Link><Link href="/sell">سجّل كتاجر</Link><Link href="/resell">البيع بالعمولة</Link><Link href="/rfq">اطلب عرض سعر</Link></div>
         <div className="col g4"><b>مساعدة</b><Link href="/help">مركز المساعدة</Link><Link href="/legal/returns">المرتجعات</Link><Link href="/legal/terms">الشروط</Link><Link href="/legal/privacy">الخصوصية</Link></div>
       </div>
       <Skyline />

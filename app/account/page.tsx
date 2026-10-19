@@ -63,6 +63,7 @@ function Body() {
             {isAdmin && <Link href="/admin"><span className="mi"><i className="ph ph-gear" /></span><span className="sp">لوحة الإدارة</span><i className="ph ph-caret-left chev" /></Link>}
             {merchant ? <Link href="/merchant"><span className="mi"><i className="ph ph-storefront" /></span><span className="sp">لوحة التاجر</span><i className="ph ph-caret-left chev" /></Link>
               : <Link href="/sell"><span className="mi"><i className="ph ph-storefront" /></span><span className="sp">سجّل كتاجر وابدأ البيع</span><i className="ph ph-caret-left chev" /></Link>}
+            <Link href="/resell"><span className="mi"><i className="ph ph-hand-coins" /></span><span className="sp">البيع بالعمولة <small className="mu">— اكسب عمولة من غير رأس مال</small></span><i className="ph ph-caret-left chev" /></Link>
             <Link href="/help"><span className="mi"><i className="ph ph-question" /></span><span className="sp">المساعدة والدعم</span><i className="ph ph-caret-left chev" /></Link>
             <button onClick={async () => { await signOut(); router.push("/"); }} style={{ color: "var(--err)" }}><span className="mi" style={{ color: "var(--err)" }}><i className="ph ph-sign-out" /></span><span className="sp">تسجيل خروج</span></button>
           </div>
