@@ -52,6 +52,55 @@ function Bars({ title, data, fmtV }: { title: string; data: { d: string; v: numb
   );
 }
 
+function Kpi({ ic, t, v, sub, delta, small }: { ic: string; t: string; v: string; sub?: string; delta?: number | null; small?: boolean }) {
+  return (
+    <div className="stat" style={{ gap: 4 }}>
+      <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+        <small className="sp">{t}</small>
+        <span style={{ width: 30, height: 30, borderRadius: 8, background: "var(--cream)", display: "grid", placeItems: "center", color: "var(--pa)", flex: "none" }}><i className={`ph ${ic}`} aria-hidden /></span>
+      </div>
+      <b style={small ? { fontSize: 19 } : undefined}>{v}</b>
+      {sub && <small className="mu">{sub}</small>}
+      {delta !== undefined && <Delta v={delta ?? null} />}
+    </div>
+  );
+}
+
+/** Two-series daily line chart: one y-axis, 2px lines, crosshair + tooltip on hover, legend + table-free direct totals. */
+function LineChart({ data, series, fmtV }: { data: Record<string, number | string>[]; series: { key: string; label: string; color: string }[]; fmtV: (n: number) => string }) {
+  const [hi, setHi] = useState<number | null>(null);
+  const W = 640, H = 220, P = { l: 8, r: 8, t: 10, b: 22 };
+  const n = data.length, max = Math.max(1, ...data.flatMap((d) => series.map((s) => Number(d[s.key]) || 0)));
+  const x = (i: number) => P.l + (n <= 1 ? 0 : (i / (n - 1)) * (W - P.l - P.r));
+  const y = (v: number) => P.t + (1 - v / max) * (H - P.t - P.b);
+  const path = (k: string) => data.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(Number(d[k]) || 0).toFixed(1)}`).join("");
+  const totals = series.map((s) => data.reduce((a, d) => a + (Number(d[s.key]) || 0), 0));
+  const cur = hi !== null ? data[hi] : null;
+  return (
+    <div className="col" style={{ gap: 6 }}>
+      <div className="row wrap" style={{ gap: 14, fontSize: 13 }}>
+        {series.map((s, i) => <span key={s.key} className="row" style={{ gap: 6 }}><span style={{ width: 14, height: 3, borderRadius: 2, background: s.color, display: "inline-block" }} />{s.label}: <b>{fmtV(cur ? Number(cur[s.key]) || 0 : totals[i])}</b></span>)}
+        <small className="mu sp" style={{ textAlign: "left" }}>{cur ? new Date(String(cur.d)).toLocaleDateString("ar-EG", { weekday: "short", day: "numeric", month: "short" }) : "الإجمالي"}</small>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", direction: "ltr", touchAction: "pan-y" }} role="img" aria-label={series.map((s, i) => `${s.label} ${fmtV(totals[i])}`).join(" · ")}
+        onMouseLeave={() => setHi(null)}
+        onMouseMove={(e) => { const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; setHi(Math.max(0, Math.min(n - 1, Math.round(((px - P.l) / (W - P.l - P.r)) * (n - 1))))); }}
+        onTouchStart={(e) => { const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect(); const px = ((e.touches[0].clientX - r.left) / r.width) * W; setHi(Math.max(0, Math.min(n - 1, Math.round(((px - P.l) / (W - P.l - P.r)) * (n - 1))))); }}>
+        {[0.25, 0.5, 0.75, 1].map((g) => <line key={g} x1={P.l} x2={W - P.r} y1={y(max * g)} y2={y(max * g)} stroke="var(--bd)" strokeWidth={1} />)}
+        <line x1={P.l} x2={W - P.r} y1={y(0)} y2={y(0)} stroke="var(--mu)" strokeWidth={1} opacity={0.5} />
+        {series.map((s) => <path key={s.key} d={path(s.key)} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />)}
+        {hi !== null && <>
+          <line x1={x(hi)} x2={x(hi)} y1={P.t} y2={H - P.b} stroke="var(--mu)" strokeWidth={1} strokeDasharray="3 3" />
+          {series.map((s) => <circle key={s.key} cx={x(hi)} cy={y(Number(data[hi][s.key]) || 0)} r={4.5} fill={s.color} stroke="#fff" strokeWidth={2} />)}
+        </>}
+        <text x={P.l} y={H - 6} fontSize={11} fill="var(--mu)">{String(data[0]?.d || "").slice(5)}</text>
+        <text x={W - P.r} y={H - 6} fontSize={11} fill="var(--mu)" textAnchor="end">{String(data[n - 1]?.d || "").slice(5)}</text>
+        <text x={W - P.r} y={P.t + 10} fontSize={11} fill="var(--mu)" textAnchor="end">{fmtV(max)}</text>
+      </svg>
+    </div>
+  );
+}
+
 function Table({ head, rows, empty = "مفيش بيانات لسه" }: { head: string[]; rows: (string | number | React.ReactNode)[][]; empty?: string }) {
   if (!rows.length) return <small className="mu">{empty}</small>;
   return <div style={{ overflowX: "auto" }}><table className="tbl"><thead><tr>{head.map((h) => <th key={h} style={{ textAlign: "start", fontSize: 12.5, color: "var(--mu)" }}>{h}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, k) => <td key={k} style={{ fontSize: 13.5 }}>{c}</td>)}</tr>)}</tbody></table></div>;
@@ -83,48 +132,90 @@ export default function InsightsPage() {
           const k = data.kpis;
           return (
             <>
-              {tab === "overview" && (
-                <>
-                  <div className="grid" style={st("--m:2;--d:4")}>
-                    <Tile t={`مبيعات الجملة (${days} يوم)`} v={ji(k.gmv)} sub={`${k.orders} طلب · متوسط ${ji(k.aov)}`}><Delta v={k.gmvChange} /></Tile>
-                    <Tile t="مبيعات البيع بالعمولة" v={ji(k.resellGmv)} sub={`${k.resellOrders} طلب`}><Delta v={k.resellChange} /></Tile>
-                    <Tile t="هامش الربح التقديري" v={ji(k.margin)} sub={k.marginPct !== null ? `${k.marginPct}% من المنتجات اللي سعر موردها معروف` : "محتاج أسعار المورد على المنتجات"} />
-                    <Tile t="مستخدمين جداد" v={fmt(k.newUsers)} sub={k.usersListed ? `من ${fmt(k.users)} مستخدم · نشط ${fmt(k.activeUsers)}` : "قائمة المستخدمين مش متاحة"} />
-                  </div>
-                  <div className="card col" style={{ gap: 8 }}>
-                    <div className="row"><b className="sp">مشاكل محتاجة تدخّل ({data.issues.length})</b></div>
-                    {!data.issues.length ? <small style={{ color: "#1e6b43" }}><i className="ph ph-check-circle" /> مفيش مشاكل واضحة دلوقتي.</small> : data.issues.map((i, n) => {
-                      const [lb, c, ic] = LEVEL[i.level];
-                      return (
-                        <div key={n} className="row" style={{ gap: 10, alignItems: "flex-start", borderBottom: "1px solid var(--bd)", padding: "8px 0" }}>
-                          <i className={`ph-fill ${ic}`} style={{ color: c, fontSize: 20, flex: "none" }} aria-hidden />
-                          <div className="sp col" style={{ gap: 2 }}><b style={{ fontSize: 14 }}><span style={{ color: c }}>[{lb}]</span> {i.title}</b><small className="mu">{i.detail}</small></div>
-                          {i.link && <Link href={i.link} className="btn o sm2">افتح</Link>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="grid" style={st("--m:1;--d:2")}>
-                    <Bars title="المبيعات اليومية (جملة + عمولة)" data={data.daily.map((x) => ({ d: x.d, v: x.gmv + x.rgmv }))} fmtV={ji} />
-                    <Bars title="عدد الطلبات اليومي" data={data.daily.map((x) => ({ d: x.d, v: x.orders + x.rorders }))} fmtV={(n) => `${fmt(n)} طلب`} />
-                  </div>
-                  <div className="grid" style={st("--m:1;--d:2")}>
-                    <div className="card col" style={{ gap: 8 }}><b>الأكثر مبيعاً</b><Table head={["المنتج", "الكمية", "المبيعات"]} rows={data.topProducts.map((p) => [<Link key={p.id} href={`/product/${p.id}`}>{p.name}</Link>, fmt(p.qty), ji(p.revenue)])} /></div>
-                    <div className="card col" style={{ gap: 8 }}><b>المحافظات</b><Table head={["المحافظة", "الطلبات", "المبيعات"]} rows={data.governorates.map((g) => [g.name, fmt(g.orders), ji(g.revenue)])} /></div>
-                  </div>
-                </>
-              )}
-
+              {tab === "overview" && (() => {
+                const f = data.flow;
+                const S = (st: string) => (RSTATUS as Record<string, string>)[st] || ORDER_STATUS[st] || st;
+                const pmax = Math.max(1, ...data.pipeline.map((x) => x.count));
+                const tp = data.topProducts.slice(0, 6), tmax = Math.max(1, ...tp.map((x) => x.revenue));
+                const gv = data.governorates.slice(0, 6), gmax = Math.max(1, ...gv.map((x) => x.orders));
+                return (
+                  <>
+                    <div className="grid" style={st("--m:2;--d:4")}>
+                      <Kpi ic="ph-check-circle" t="المبيعات المكتملة (اتسلّمت)" v={ji(f.done.value)} sub={`${f.done.count} طلب اتسلّم`} delta={f.doneChange} />
+                      <Kpi ic="ph-hourglass-medium" t="قيد التنفيذ" v={ji(f.progress.value)} sub={`${f.progress.count} طلب (جديد / مؤكد / اتشحن)`} />
+                      <Kpi ic="ph-receipt" t="إجمالي اللي اتطلب" v={ji(f.requested.value)} sub={`${f.requested.count} طلب`} delta={f.requestedChange} />
+                      <Kpi ic="ph-coins" t="ربحك من المكتمل (تقديري)" v={ji(k.margin)} sub={`عمولات البائعين على المكتمل ${ji(f.done.commissions)}`} />
+                    </div>
+                    <div className="grid" style={st("--m:2;--d:4")}>
+                      <Kpi ic="ph-x-circle" t="ملغي / مرتجع" v={ji(f.lost.value)} sub={`${f.lost.count} طلب`} small />
+                      <Kpi ic="ph-wallet" t="مستحق للبائعين" v={ji(k.commissionsDue)} sub={`طلبات سحب مستنية ${ji(k.payoutsOpen)}`} small />
+                      <Kpi ic="ph-users" t="مستخدمين جداد" v={fmt(k.newUsers)} sub={k.usersListed ? `من ${fmt(k.users)} · نشط ${fmt(k.activeUsers)}` : ""} small />
+                      <Kpi ic="ph-package" t="منتجات منشورة" v={fmt(k.activeProducts)} sub={`مستني مراجعة ${k.pendingProducts}`} small />
+                    </div>
+                    <div className="dash2">
+                      <div className="card col" style={{ gap: 8 }}>
+                        <b>المطلوب مقابل المكتمل يومياً</b>
+                        <LineChart data={data.daily} series={[{ key: "requested", label: "اتطلب", color: "var(--s1)" }, { key: "done", label: "اتسلّم (مبيعات)", color: "var(--s2)" }]} fmtV={ji} />
+                      </div>
+                      <div className="card col" style={{ gap: 10 }}>
+                        <b>حالة الطلبات ({days} يوم)</b>
+                        {data.pipeline.map((x) => (
+                          <div key={x.status} className="col" style={{ gap: 3 }} title={`${S(x.status)}: ${x.count} طلب · ${ji(x.value)}`}>
+                            <div className="row" style={{ fontSize: 13 }}><span className="sp">{S(x.status)}</span><b>{fmt(x.count)}</b><small className="mu" style={{ minWidth: 80, textAlign: "left" }}>{ji(x.value)}</small></div>
+                            <div style={{ height: 8, background: "var(--cream)", borderRadius: 4 }}><div style={{ width: `${(x.count / pmax) * 100}%`, height: "100%", background: "var(--pa)", borderRadius: 4, opacity: x.status === "returned" || x.status === "cancelled" ? 0.45 : 1 }} /></div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="dash2">
+                      <div className="card col" style={{ gap: 8 }}>
+                        <div className="row"><b className="sp">آخر الطلبات</b><Link href="/admin/orders" className="mu" style={{ fontSize: 13 }}>الجملة</Link><span className="mu">·</span><Link href="/admin/resell" className="mu" style={{ fontSize: 13 }}>العمولة</Link></div>
+                        <Table head={["الطلب", "العميل", "النوع", "المبلغ", "الحالة", "التاريخ"]} rows={data.recent.map((o) => [`#${o.no}`, <span key={o.id}>{o.who}<br /><small className="mu">{o.gov}</small></span>, o.kind === "resell" ? "عمولة" : "جملة", ji(o.value), <span key={o.id + "s"} className="bd" style={o.status === "delivered" ? { background: "#e6f4ec", color: "#1e6b43" } : o.status === "cancelled" || o.status === "returned" ? { background: "#fdecea", color: "#b3261e" } : { background: "#fff4d6", color: "#8a6100" }}>{S(o.status)}</span>, dt(o.at)])} empty="لسه مفيش طلبات" />
+                      </div>
+                      <div className="card col" style={{ gap: 10 }}>
+                        <b>الأكثر طلباً</b>
+                        {!tp.length ? <small className="mu">لسه مفيش</small> : tp.map((p) => (
+                          <div key={p.id} className="col" style={{ gap: 3 }}>
+                            <div className="row" style={{ fontSize: 13, gap: 6 }}><Link href={`/product/${p.id}`} className="sp" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</Link><b>{ji(p.revenue)}</b></div>
+                            <div style={{ height: 6, background: "var(--cream)", borderRadius: 3 }}><div style={{ width: `${(p.revenue / tmax) * 100}%`, height: "100%", background: "var(--pa)", borderRadius: 3 }} /></div>
+                          </div>
+                        ))}
+                        <b style={{ marginTop: 6 }}>المحافظات</b>
+                        {!gv.length ? <small className="mu">لسه مفيش</small> : gv.map((g) => (
+                          <div key={g.name} className="row" style={{ fontSize: 13, gap: 8 }}>
+                            <span style={{ width: 90 }}>{g.name}</span>
+                            <div className="sp" style={{ height: 6, background: "var(--cream)", borderRadius: 3 }}><div style={{ width: `${(g.orders / gmax) * 100}%`, height: "100%", background: "var(--pa)", borderRadius: 3 }} /></div>
+                            <b>{fmt(g.orders)}</b>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="card col" style={{ gap: 8 }}>
+                      <b>مشاكل محتاجة تدخّل ({data.issues.length})</b>
+                      {!data.issues.length ? <small style={{ color: "#1e6b43" }}><i className="ph ph-check-circle" /> مفيش مشاكل واضحة دلوقتي.</small> : data.issues.map((i, n) => {
+                        const [lb, c, ic] = LEVEL[i.level];
+                        return (
+                          <div key={n} className="row" style={{ gap: 10, alignItems: "flex-start", borderBottom: "1px solid var(--bd)", padding: "8px 0" }}>
+                            <i className={`ph-fill ${ic}`} style={{ color: c, fontSize: 20, flex: "none" }} aria-hidden />
+                            <div className="sp col" style={{ gap: 2 }}><b style={{ fontSize: 14 }}><span style={{ color: c }}>[{lb}]</span> {i.title}</b><small className="mu">{i.detail}</small></div>
+                            {i.link && <Link href={i.link} className="btn o sm2">افتح</Link>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
               {tab === "money" && (
                 <>
                   <div className="grid" style={st("--m:2;--d:4")}>
-                    <Tile t={`إجمالي المبيعات (${days} يوم)`} v={ji(k.gmv + k.resellGmv)} sub={`جملة ${ji(k.gmv)} + عمولة ${ji(k.resellGmv)}`} />
-                    <Tile t="هامش الربح التقديري" v={ji(k.margin)} sub={k.marginPct !== null ? `${k.marginPct}%` : "—"} />
+                    <Tile t={`مبيعات مكتملة (${days} يوم)`} v={ji(data.flow.done.value)} sub={`${data.flow.done.count} طلب اتسلّم · قيد التنفيذ ${ji(data.flow.progress.value)}`} />
+                    <Tile t="ربحك من المكتمل (تقديري)" v={ji(k.margin)} sub={k.marginPct !== null ? `${k.marginPct}% من المنتجات اللي سعر موردها معروف` : "محتاج أسعار المورد على المنتجات"} />
                     <Tile t="عمولات مستحقة للبائعين" v={ji(k.commissionsDue)} sub={`متاح ${ji(k.commissionsAvailable)} · معلّق ${ji(k.commissionsPending)}`} />
                     <Tile t="طلبات سحب مستنية تحويل" v={ji(k.payoutsOpen)} sub={`اتحوّل لحد دلوقتي ${ji(k.payoutsPaid)}`} />
                   </div>
-                  <Bars title="مبيعات الجملة يومياً" data={data.daily.map((x) => ({ d: x.d, v: x.gmv }))} fmtV={ji} />
-                  <Bars title="مبيعات البيع بالعمولة يومياً" data={data.daily.map((x) => ({ d: x.d, v: x.rgmv }))} fmtV={ji} />
+                  <Bars title="طلبات الجملة يومياً (قيمة اللي اتطلب)" data={data.daily.map((x) => ({ d: x.d, v: x.gmv }))} fmtV={ji} />
+                  <Bars title="طلبات البيع بالعمولة يومياً (قيمة اللي اتطلب)" data={data.daily.map((x) => ({ d: x.d, v: x.rgmv }))} fmtV={ji} />
                   <div className="grid" style={st("--m:1;--d:2")}>
                     <div className="card col" style={{ gap: 8 }}><b>حالات طلبات الجملة (كل الوقت)</b><Table head={["الحالة", "العدد"]} rows={data.status.orders.map(([s, n]) => [ORDER_STATUS[s] || s, fmt(n)])} /></div>
                     <div className="card col" style={{ gap: 8 }}><b>حالات طلبات البيع بالعمولة</b><Table head={["الحالة", "العدد"]} rows={data.status.rorders.map(([s, n]) => [RSTATUS[s as keyof typeof RSTATUS] || s, fmt(n)])} /></div>

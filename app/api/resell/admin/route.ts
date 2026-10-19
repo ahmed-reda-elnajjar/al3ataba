@@ -1,6 +1,6 @@
 /* Admin side of "البيع بالعمولة": list everything, change order status, approve resellers, settle withdrawals, save settings. */
 import { revalidateTag } from "next/cache";
-import { isAdminToken } from "@/lib/serverAuth";
+import { roleFromToken } from "@/lib/staff";
 import { getDocSA, listNewestSA, listSA, patchDocSA } from "@/lib/sa";
 import { CATALOG_TAG } from "@/lib/catalog";
 import { RNEXT, resellSettings, type Payout, type ROrder, type RStatus, type Reseller, type ResellSettings } from "@/lib/resell";
@@ -12,7 +12,8 @@ const bad = (error: string, status = 400) => Response.json({ error }, { status, 
 const sec = (t?: { seconds: number }) => t?.seconds ?? 0;
 
 export async function GET(req: Request) {
-  if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return bad("unauthorized", 401);
+  const who = await roleFromToken(req.headers.get("x-firebase-token") || "").catch(() => null);
+  if (!who || (who.role !== "admin" && who.role !== "resell")) return bad("مش عندك صلاحية على قسم البيع بالعمولة", 401);
   try {
     const [orders, resellers, payouts, site] = await Promise.all([
       listNewestSA<ROrder>("rorders", 500),
@@ -21,12 +22,13 @@ export async function GET(req: Request) {
       getDocSA<Settings>("settings/site"),
     ]);
     resellers.sort((a, b) => sec(b.createdAt) - sec(a.createdAt));
-    return Response.json({ orders, resellers, payouts, settings: resellSettings(site?.resell) }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ orders, resellers, payouts, settings: resellSettings(site?.resell), role: who.role }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) { const x = e as Error & { status?: number }; return bad(String(x.message || e), x.status || 500); }
 }
 
 export async function POST(req: Request) {
-  if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return bad("unauthorized", 401);
+  const who = await roleFromToken(req.headers.get("x-firebase-token") || "").catch(() => null);
+  if (!who || (who.role !== "admin" && who.role !== "resell")) return bad("مش عندك صلاحية على قسم البيع بالعمولة", 401);
   try {
     const b = await req.json().catch(() => ({}));
     const id = String(b.id || "").replace(/[^\w-]/g, "");
@@ -53,6 +55,7 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
     if (b.action === "settings") {
+      if (who.role !== "admin") return bad("الإعدادات للإدارة الرئيسية بس", 403);
       const s = b.resell as Partial<ResellSettings>;
       const nums = (o: unknown) => Object.fromEntries(Object.entries((o as Record<string, unknown>) || {}).filter(([, v]) => typeof v === "number" && isFinite(v as number) && (v as number) >= 0)) as Record<string, number>;
       const clean = resellSettings({ commissionPct: Number(s.commissionPct), retailPct: Number(s.retailPct), shipDefault: Number(s.shipDefault), holdDays: Number(s.holdDays) });

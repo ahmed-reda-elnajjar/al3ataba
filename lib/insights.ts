@@ -56,14 +56,37 @@ export async function buildInsights(days = 30) {
 
   // our margin estimate (only items whose supplier price is known)
   let margin = 0, marginBase = 0;
-  for (const o of oIn.filter((x) => live(x.status))) for (const i of o.items || []) { const c = unitCost(i.productId, i.price, i.qty); if (c !== null) { margin += (i.price - c) * i.qty; marginBase += i.price * i.qty; } }
-  for (const o of rIn.filter((x) => rLive(x.status))) for (const i of o.items || []) { const c = unitCost(i.productId, i.base, i.qty); if (c !== null) { margin += (i.base - c) * i.qty; marginBase += i.base * i.qty; } }
+  // (only COMPLETED orders count — a request isn't a sale until it's delivered)
+  for (const o of oIn.filter((x) => x.status === "delivered")) for (const i of o.items || []) { const c = unitCost(i.productId, i.price, i.qty); if (c !== null) { margin += (i.price - c) * i.qty; marginBase += i.price * i.qty; } }
+  for (const o of rIn.filter((x) => x.status === "delivered")) for (const i of o.items || []) { const c = unitCost(i.productId, i.base, i.qty); if (c !== null) { margin += (i.base - c) * i.qty; marginBase += i.base * i.qty; } }
+
+  /* ---- order pipeline: requested → in progress → completed / lost (both kinds of orders) ---- */
+  type Row = { kind: "wholesale" | "resell"; id: string; no: string; who: string; gov: string; status: string; value: number; at: number; doneAt: number; commission: number };
+  const rows: Row[] = [
+    ...orders.map((o) => ({ kind: "wholesale" as const, id: o.id, no: o.orderNo || o.id.slice(0, 6), who: o.buyerName || "—", gov: o.address?.governorate || "", status: o.status, value: o.subtotal || 0, at: t(o.createdAt), doneAt: t(o.createdAt), commission: 0 })),
+    ...rorders.map((o) => ({ kind: "resell" as const, id: o.id, no: o.id.slice(0, 6), who: o.customer?.name || "—", gov: o.customer?.governorate || "", status: o.status, value: o.subtotal || 0, at: t(o.createdAt), doneAt: o.deliveredAt || t(o.createdAt), commission: o.commissionTotal || 0 })),
+  ];
+  const stage = (st: string) => (st === "delivered" ? "done" : st === "cancelled" || st === "returned" ? "lost" : "progress");
+  const sum = (l: Row[]) => r0(l.reduce((a, x) => a + x.value, 0));
+  const inP = rows.filter((x) => x.at >= from), prevP = rows.filter((x) => x.at >= prevFrom && x.at < from);
+  const doneIn = rows.filter((x) => x.status === "delivered" && x.doneAt >= from), donePrev = rows.filter((x) => x.status === "delivered" && x.doneAt >= prevFrom && x.doneAt < from);
+  const STAGES = ["new", "confirmed", "shipped", "delivered", "returned", "cancelled"];
+  const pipeline = STAGES.map((st) => { const l = inP.filter((x) => x.status === st); return { status: st, count: l.length, value: sum(l) }; });
+  const flow = {
+    requested: { count: inP.length, value: sum(inP), prev: sum(prevP) },
+    progress: { count: inP.filter((x) => stage(x.status) === "progress").length, value: sum(inP.filter((x) => stage(x.status) === "progress")) },
+    done: { count: doneIn.length, value: sum(doneIn), prev: sum(donePrev), commissions: r0(doneIn.reduce((a, x) => a + x.commission, 0)) },
+    lost: { count: inP.filter((x) => stage(x.status) === "lost").length, value: sum(inP.filter((x) => stage(x.status) === "lost")) },
+  };
+  const recent = [...rows].sort((a, b) => b.at - a.at).slice(0, 10).map((x) => ({ ...x, value: r0(x.value) }));
 
   /* ---- daily series ---- */
-  const daily: Record<string, { d: string; gmv: number; orders: number; rgmv: number; rorders: number; users: number }> = {};
-  for (let k = days - 1; k >= 0; k--) { const d = dayKey(now - k * DAY); daily[d] = { d, gmv: 0, orders: 0, rgmv: 0, rorders: 0, users: 0 }; }
+  const daily: Record<string, { d: string; gmv: number; orders: number; rgmv: number; rorders: number; users: number; requested: number; done: number }> = {};
+  for (let k = days - 1; k >= 0; k--) { const d = dayKey(now - k * DAY); daily[d] = { d, gmv: 0, orders: 0, rgmv: 0, rorders: 0, users: 0, requested: 0, done: 0 }; }
   for (const o of oIn) { const x = daily[dayKey(t(o.createdAt))]; if (x) { x.orders++; if (live(o.status)) x.gmv += o.subtotal || 0; } }
   for (const o of rIn) { const x = daily[dayKey(t(o.createdAt))]; if (x) { x.rorders++; if (rLive(o.status)) x.rgmv += o.subtotal || 0; } }
+  for (const o of orders) { const x = daily[dayKey(t(o.createdAt))]; if (x && o.status !== "cancelled") x.requested += o.subtotal || 0; if (x && o.status === "delivered") x.done += o.subtotal || 0; }
+  for (const o of rorders) { const x = daily[dayKey(t(o.createdAt))]; if (x && o.status !== "cancelled") x.requested += o.subtotal || 0; const y = o.status === "delivered" && o.deliveredAt ? daily[dayKey(o.deliveredAt)] : undefined; if (y) y.done += o.subtotal || 0; }
   const realUsers = users.filter((u) => !u.anonymous);
   for (const u of realUsers) { const x = daily[dayKey(u.createdAt)]; if (x) x.users++; }
 
@@ -154,7 +177,8 @@ export async function buildInsights(days = 30) {
       resellers: resellers.length, resellersApproved: resellers.filter((r) => r.status === "approved").length, resellersPending: pendingResellers,
       openRfqs: rfqs.filter((r) => r.status === "open").length, returnRate: retRate, cancelRate, usersListed: users.length > 0,
     },
-    daily: Object.values(daily).map((x) => ({ ...x, gmv: r0(x.gmv), rgmv: r0(x.rgmv) })),
+    daily: Object.values(daily).map((x) => ({ ...x, gmv: r0(x.gmv), rgmv: r0(x.rgmv), requested: r0(x.requested), done: r0(x.done) })),
+    flow: { ...flow, doneChange: pct(flow.done.value, flow.done.prev), requestedChange: pct(flow.requested.value, flow.requested.prev) }, pipeline, recent,
     status: {
       orders: Object.entries(orders.reduce((a, o) => ({ ...a, [o.status]: (a[o.status] || 0) + 1 }), {} as Record<string, number>)),
       rorders: Object.entries(rorders.reduce((a, o) => ({ ...a, [o.status]: (a[o.status] || 0) + 1 }), {} as Record<string, number>)),
@@ -171,7 +195,7 @@ export async function buildInsights(days = 30) {
 /** Only aggregated, non-personal numbers for the AI advisor. */
 export function aiBrief(x: Insights) {
   return {
-    days: x.days, kpis: x.kpis, catalog: x.catalog,
+    days: x.days, ordersFlow: x.flow, pipeline: x.pipeline, note: "requested = طلبات اتعملت، done = اتسلّمت فعلاً (دي المبيعات الحقيقية)", kpis: x.kpis, catalog: x.catalog,
     last7days: x.daily.slice(-7), orderStatus: x.status,
     topProducts: x.topProducts.map((p) => ({ name: p.name, qty: p.qty, revenue: p.revenue })),
     topCategories: x.topCategories, governorates: x.governorates.map((g) => ({ name: g.name, orders: g.orders, revenue: g.revenue })),

@@ -9,6 +9,7 @@ const links = [
   { href: "/admin/categories", t: "الأقسام", ic: "ph-squares-four" },
   { href: "/admin/promos", t: "العروض والخصومات", ic: "ph-tag" },
   { href: "/admin/resell", t: "البيع بالعمولة", ic: "ph-hand-coins" },
+  { href: "/admin/staff", t: "الموظفين والصلاحيات", ic: "ph-user-gear" },
   { href: "/admin/enhance", t: "تحسين الصور والأوصاف", ic: "ph-magic-wand" },
   { href: "/admin/import", t: "استيراد من تليجرام", ic: "ph-telegram-logo" },
   { href: "/admin/import-site", t: "استيراد من موقع تاجر", ic: "ph-globe" },

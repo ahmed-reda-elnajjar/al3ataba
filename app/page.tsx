@@ -11,7 +11,6 @@ import { Skyline } from "@/components/Brand";
 import { Recommended } from "@/components/Recommend";
 import { HeroSlider, usePersonalCats } from "@/components/Promos";
 import { Rail } from "@/components/Rail";
-import { sized } from "@/lib/media";
 
 const EMPTY: never[] = [];
 
@@ -24,22 +23,16 @@ export default function Home() {
   });
   const verified = new Set((data?.merchants ?? []).filter((m) => m.verified).map((m) => m.id));
   const products = data?.products ?? [];
-  const tops = useMemo(() => topCats(data?.cats ?? EMPTY), [data]); // sub-categories live inside their main category
-  const { list: cats, offers } = usePersonalCats(tops);
+  // main categories first, then sub-categories ordered for this shopper (offers → what they browse/buy most)
+  const tops = useMemo(() => topCats(data?.cats ?? EMPTY), [data]);
+  const subs = useMemo(() => { const ids = new Set(tops.map((t) => t.id)); return (data?.cats ?? EMPTY).filter((c) => !ids.has(c.id)); }, [data, tops]);
+  const { list: mains, offers } = usePersonalCats(tops);
+  const { list: subList, offers: subOffers } = usePersonalCats(subs);
+  const cats = useMemo(() => [...mains, ...subList.slice(0, 16)], [mains, subList]);
+  const hasOffer = (id: string) => offers.has(id) || subOffers.has(id);
   return (
     <div className="wc">
       <HeroSlider />
-
-      {/* category circles */}
-      {cats.length > 0 && (
-        <div className="scr" style={{ gap: 14, marginBottom: 22 }}>
-          {cats.map((c) => (
-            <Link key={c.id} href={`/c/${c.id}`} className="cat">
-              <span className="circ">{c.image ? <img src={sized(c.image, 160)} alt="" loading="lazy" /> : <i className={`ph ${c.icon}`} />}{offers.has(c.id) && <span className="cbadge">عرض</span>}</span>{c.name}
-            </Link>
-          ))}
-        </div>
-      )}
 
       {/* main categories grid */}
       {cats.length > 0 && (
@@ -47,9 +40,9 @@ export default function Home() {
           <div className="sec-h"><h2>أقسام رئيسية</h2><Link href="/categories">عرض الكل</Link></div>
           <Rail>
             {cats.map((c) => (
-              <Link key={c.id} href={`/c/${c.id}`} className="tile">
-                <Img src={c.image} ic={c.icon} ratio={1} w={300} />
-                {offers.has(c.id) && <span className="pbadge"><i className="ph-fill ph-tag" />عرض</span>}
+              <Link key={c.id} href={`/c/${c.id}`} className="tile short">
+                <Img src={c.image} ic={c.icon} ratio={4 / 3} w={300} />
+                {hasOffer(c.id) && <span className="pbadge"><i className="ph-fill ph-tag" />عرض</span>}
                 <span>{c.name}</span>
               </Link>
             ))}

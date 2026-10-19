@@ -432,3 +432,12 @@ a.card:hover{border-color:var(--gold)}
 .rail-btn:hover{background:var(--cream2)}.rail-btn i{font-size:20px}
 .rail-btn.prev{right:-12px}.rail-btn.next{left:-12px}
 @media(max-width:699px){.rail-btn{display:none}}
+
+/* home: shorter category tiles (3.5 visible on phones so it's clear the row scrolls) */
+.tile.short span{padding:6px 4px;font-size:13px;line-height:1.3}
+@media(max-width:699px){.rail-track:has(>.tile.short){grid-auto-columns:calc((100% - 30px) / 3.5);gap:8px}.tile.short span{font-size:12px;padding:5px 3px}}
+
+/* admin dashboard: chart series (validated categorical slots 1–2) + 2-column rows */
+:root{--s1:#2a78d6;--s2:#eb6834}
+.dash2{display:grid;gap:14px;grid-template-columns:1fr}
+@media(min-width:1000px){.dash2{grid-template-columns:2fr 1fr}}

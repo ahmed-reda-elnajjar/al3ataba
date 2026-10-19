@@ -23,8 +23,16 @@ const BARE = ["/login", "/signup"];
 
 export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const path = usePathname();
-  const { isAdmin, loggedIn, merchant, signOut } = useApp();
+  const { isAdmin, loggedIn, merchant, signOut, user } = useApp();
   const [tab, setTab] = useState<"menu" | "cats">("menu");
+  // team members with limited access (e.g. resell manager) get a link to their page
+  const [staff, setStaff] = useState(false);
+  useEffect(() => {
+    if (!loggedIn || isAdmin || !user || user.isAnonymous) { setStaff(false); return; }
+    const k = `al3ataba-staff-${user.uid}`;
+    try { const c = sessionStorage.getItem(k); if (c !== null) { setStaff(c === "1"); return; } } catch { /* ignore */ }
+    user.getIdToken().then((t) => fetch("/api/staff/me", { headers: { "x-firebase-token": t } })).then((r) => r.json()).then((j) => { const v = !!j?.role; setStaff(v); try { sessionStorage.setItem(k, v ? "1" : "0"); } catch { /* ignore */ } }).catch(() => {});
+  }, [loggedIn, isAdmin, user]);
   const { data: cats } = useAsync(listCategories, []);
   useEffect(() => { onClose(); // close on navigation
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,6 +70,7 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
             <L href={loggedIn ? "/account" : "/login"} ic="ph-user" t={loggedIn ? "حسابي" : "تسجيل الدخول"} />
             {merchant?.status === "approved" ? <L href="/merchant" ic="ph-storefront" t="لوحة التاجر" /> : <L href="/sell" ic="ph-handshake" t="بيع معانا" />}
             <L href="/help" ic="ph-question" t="المساعدة" />
+            {staff && <L href="/staff/resell" ic="ph-briefcase" t="إدارة البيع بالعمولة" />}
             {isAdmin ? (
               <>
                 <div className="dr-sep" />
