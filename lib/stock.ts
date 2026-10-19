@@ -51,3 +51,8 @@ export async function fetchCatalogue(base: string, deadline: number) {
   }
   return { products: [...byId.values()], total, complete: Date.now() < deadline };
 }
+
+/** Warn when the supplier has fewer pieces than this. */
+export const LOW_STOCK = 100;
+/** Per-model quantities (sizes/colours/phone models) as stored on our product. */
+export const modelsOf = (p: SrcStock) => arr<{ type?: string; qty?: number | string }>(p.variation).filter((v) => v && v.type).slice(0, 120).map((v) => ({ type: String(v.type), qty: Math.max(0, Number(v.qty) || 0) }));

@@ -4,7 +4,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 
-type Run = { at?: string; checked?: number; hidden?: number; restored?: number; gone?: number; seconds?: number; note?: string; error?: string; by?: string };
+type Run = { at?: string; checked?: number; hidden?: number; restored?: number; gone?: number; low?: number; seconds?: number; note?: string; error?: string; by?: string };
 const n = (v: unknown) => Number(v) || 0;
 
 /** Admin card: last automatic stock check against the partner stores + "run now". */
@@ -30,10 +30,10 @@ export function StockSync() {
   return (
     <div className="card col" style={{ gap: 8 }}>
       <div className="row wrap"><b className="sp"><i className="ph ph-arrows-clockwise" style={{ color: "var(--gold)" }} /> الفحص التلقائي للمخزون (كل يوم)</b><button className="btn o sm2" disabled={busy} onClick={now}>{busy ? "جاري…" : "شغّل الفحص دلوقتي"}</button></div>
-      <small>كل يوم الصبح الموقع بيشيك على لينكات الموردين المحفوظة: اللي خلص عندهم بيستخبى من عندك، واللي رجع بيتنشر تاني لوحده.</small>
+      <small>كل يوم الصبح الموقع بيشيك على لينكات الموردين المحفوظة: بينقل كمية كل منتج مربوط (وكل موديل)، اللي خلص بيستخبى، اللي رجع بيتنشر تاني، واللي قلّ عن 100 قطعة بيتعلّم بتحذير.</small>
       {run ? (run.error
         ? <div className="alert e">آخر محاولة ({when}): {run.error}</div>
-        : <div className="alert">آخر فحص: <b>{when}</b>{run.by === "admin" ? " (يدوي)" : ""} · اتفحص <b>{n(run.checked)}</b> منتج · اتخفى <b>{n(run.hidden)}</b> · رجع للنشر <b>{n(run.restored)}</b>{n(run.gone) ? ` · ${n(run.gone)} مش موجودين عندهم خالص` : ""}{run.note ? <><br /><small>{run.note}</small></> : null}</div>)
+        : <div className="alert">آخر فحص: <b>{when}</b>{run.by === "admin" ? " (يدوي)" : ""} · اتفحص <b>{n(run.checked)}</b> منتج · اتخفى <b>{n(run.hidden)}</b> · رجع للنشر <b>{n(run.restored)}</b>{n(run.gone) ? ` · ${n(run.gone)} مش موجودين عندهم خالص` : ""}{n(run.low) ? <> · <b style={{ color: "#b25e00" }}>{n(run.low)} مخزونهم أقل من 100</b></> : null}{run.note ? <><br /><small>{run.note}</small></> : null}</div>)
         : <small className="mu">لسه مفيش فحص اتعمل.</small>}
       {msg && <span className="ok">{msg}</span>}
     </div>

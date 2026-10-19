@@ -112,7 +112,9 @@ export default function AdminProducts() {
     setSel([]); reload(); touchCatalog();
   };
   const revDone = (data ?? []).filter(isRev).length;
-  const list = (data ?? []).filter((p) => (f === "all" || p.status === f) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
+  const isLow = (p: Product) => typeof p.stock === "number" && p.stock < 100;
+  const lowN = (data ?? []).filter((p) => p.status === "active" && isLow(p)).length;
+  const list = (data ?? []).filter((p) => (f === "all" || (f === "low" ? p.status === "active" && isLow(p) : p.status === f)) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
   return (
     <>
       <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
@@ -138,7 +140,7 @@ export default function AdminProducts() {
         </div>
       )}
       <div className="row wrap">
-        {[["all", "الكل"], ["active", "منشور"], ["pending", `مراجعة${pendingN ? ` (${pendingN})` : ""}`], ["hidden", "مخفي"]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => { setF(k); setSel([]); }}>{t}</button>)}
+        {[["all", "الكل"], ["active", "منشور"], ["pending", `مراجعة${pendingN ? ` (${pendingN})` : ""}`], ["hidden", "مخفي"], ["low", `مخزون قليل${lowN ? ` (${lowN})` : ""}`]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => { setF(k); setSel([]); }}>{t}</button>)}
         <span style={{ width: 1, alignSelf: "stretch", background: "var(--bd)" }} />
         <button className={`chip ${rf === "todo" ? "on" : ""}`} onClick={() => setRf(rf === "todo" ? "" : "todo")}><i className="ph ph-circle-dashed" />لسه ماتراجعش ({(data?.length ?? 0) - revDone})</button>
         <button className={`chip ${rf === "done" ? "on" : ""}`} onClick={() => setRf(rf === "done" ? "" : "done")}><i className="ph ph-check-circle" />تم مراجعته ({revDone})</button>
@@ -201,6 +203,7 @@ export default function AdminProducts() {
               <div className="sp" style={{ minWidth: 160 }}><b>{p.name}</b><br /><small>{p.merchantName} · {p.categoryName} · {rangeText(p)} ج.م{p.markupTiers?.length ? ` (${p.markupTiers.map((x) => `${x.min}+: ${x.pct}%`).join(" / ")})` : p.markup ? ` (+${p.markup}%)` : ""}</small></div>
               {supName(p.supplierId) && <span className="bd w"><i className="ph ph-truck" />{supName(p.supplierId)}</span>}
               <Status s={p.status} />
+              {typeof p.stock === "number" && <span className="bd" title={p.stockCheckedAt ? `آخر تحديث ${new Date(p.stockCheckedAt).toLocaleString("ar-EG")}` : ""} style={p.stock < 100 ? { background: "#fff4d6", color: "#8a6100" } : { background: "#e6f4ec", color: "#1e6b43" }}>{p.stock < 100 ? "⚠ " : ""}مخزون المورد: {p.stock.toLocaleString("en-US")}</span>}
               <Link className="btn o sm2" href={`/admin/products/${p.id}`}>تعديل</Link>
               <button className={`btn sm2 ${isRev(p) ? "" : "o"}`} onClick={() => toggleRev(p)} title={isRev(p) ? "اضغط لإلغاء المراجعة" : "علّم إنك راجعت كل تفاصيل المنتج"}><i className={`ph${isRev(p) ? "-fill" : ""} ph-check-circle`} />{isRev(p) ? "تمت المراجعة" : "تم المراجعة"}</button>
               {p.status !== "active" ? <button className="btn sm2" onClick={() => set(p, "active")}>{p.status === "pending" ? "موافقة ونشر" : "نشر"}</button> : <button className="btn o sm2" onClick={() => set(p, "hidden")}>إخفاء</button>}

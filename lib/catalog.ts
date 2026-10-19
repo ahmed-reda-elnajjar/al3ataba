@@ -39,6 +39,7 @@ function slim(p: Product & { _updated?: string }): Product {
   return {
     id: p.id, name: p.name, description: short(p.description, 120), categoryId: p.categoryId, categoryName: p.categoryName,
     ...(p.extraCats?.length ? { extraCats: p.extraCats } : {}),
+    ...(typeof p.stock === "number" ? { stock: p.stock } : {}),
     ...(p.resellOff ? { resellOff: true } : {}), ...(p.resellMode ? { resellMode: p.resellMode } : {}),
     ...(typeof p.resellCommission === "number" ? { resellCommission: p.resellCommission } : {}),
     unit: p.unit, moq: p.moq, tiers: p.tiers || [], governorate: p.governorate || "",

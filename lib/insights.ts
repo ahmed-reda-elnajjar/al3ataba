@@ -160,6 +160,8 @@ export async function buildInsights(days = 30) {
   if (lowMargin.length) issues.push({ level: "warning", title: `${lowMargin.length} منتج هامش ربحه أقل من 5%`, detail: lowMargin.slice(0, 5).map((p) => p.name).join("، "), link: "/admin/products" });
   if (emptyCats.length) issues.push({ level: "warning", title: `${emptyCats.length} قسم فاضي من المنتجات`, detail: emptyCats.map((c) => c.name).join("، "), link: "/admin/categories" });
   if (neverSold.length > 20) issues.push({ level: "warning", title: `${neverSold.length} منتج عدّى عليه شهر من غير ولا طلب`, detail: "جرّب عروض عليهم، أو حسّن الصور والأوصاف، أو اخفي الضعيف منهم.", link: "/admin/enhance" });
+  const lowStock = active.filter((p) => typeof p.stock === "number" && p.stock < 100);
+  if (lowStock.length) issues.push({ level: "serious", title: `${lowStock.length} منتج مخزونه عند المورد أقل من 100 قطعة`, detail: lowStock.sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0)).slice(0, 6).map((p) => `${p.name} (${p.stock})`).join("، "), link: "/admin/products" });
   if (oos.length) issues.push({ level: "warning", title: `${oos.length} منتج خلصان عند المورد`, detail: "مخفيين تلقائياً — دوّر على بديل للأكثر طلباً.", link: "/admin/products" });
 
   const pct = (a: number, b: number) => (b > 0 ? r0(((a - b) / b) * 100) : null);

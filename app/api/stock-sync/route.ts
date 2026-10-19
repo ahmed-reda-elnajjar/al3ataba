@@ -4,7 +4,7 @@
  * Auth: Vercel's CRON_SECRET header, or a signed-in admin's Firebase ID token.
  * Needs env FIREBASE_SERVICE_ACCOUNT (the service-account JSON) set in Vercel — never in the code. */
 import { createSign } from "crypto";
-import { availability, fetchCatalogue } from "@/lib/stock";
+import { LOW_STOCK, availability, fetchCatalogue, modelsOf } from "@/lib/stock";
 import { revalidateTag } from "next/cache";
 import { CATALOG_TAG } from "@/lib/catalog";
 import { isAdminToken } from "@/lib/serverAuth";
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
     const ours = rows.filter((r) => r.document).map((r) => ({ name: r.document!.name, sid: r.document!.fields?.sourceId?.stringValue || "", status: r.document!.fields?.status?.stringValue || "", oos: !!r.document!.fields?.outOfStock?.booleanValue }));
 
     const writes: unknown[] = [];
-    let checked = 0, hidden = 0, restored = 0, gone = 0;
+    let checked = 0, hidden = 0, restored = 0, gone = 0, low = 0;
     const notes: string[] = [];
     for (const base of bases) {
       const host = new URL(base).host;
@@ -73,23 +73,35 @@ export async function GET(req: Request) {
       try { cat = await fetchCatalogue(base, deadline); } catch (e) { notes.push(`${host}: ${String((e as Error)?.message || e)}`); continue; }
       // note: "published" is 0 for every product on alwazeers, so it is NOT used; status 0 = disabled
       const outMap = new Map(cat.products.map((p) => [`${host}:${p.id}`, availability(p).out]));
+      const srcMap = new Map(cat.products.map((p) => [`${host}:${p.id}`, p]));
       const trustMissing = cat.complete && cat.total > 0 && cat.products.length >= cat.total * 0.9;
       for (const o of mine) {
         checked++;
         const known = outMap.has(o.sid);
         if (!known && trustMissing) gone++;
         const out: boolean | null = known ? outMap.get(o.sid)! : trustMissing ? true : null;
-        const upd = (status: string, oos: boolean) => writes.push({ update: { name: o.name, fields: { status: { stringValue: status }, outOfStock: { booleanValue: oos }, stockCheckedAt: { stringValue: new Date().toISOString() } } }, updateMask: { fieldPaths: ["status", "outOfStock", "stockCheckedAt"] } });
-        if (out === true && o.status === "active") { upd("hidden", true); hidden++; }
-        else if (out === false && o.oos && o.status === "hidden") { upd("active", false); restored++; }
+        // supplier quantities → our product (stock, per-model stock, their minimum order, low-stock flag)
+        const sp = srcMap.get(o.sid), a = sp ? availability(sp) : null;
+        const qty = known ? (a!.stock ?? null) : trustMissing ? 0 : undefined;
+        const f: Record<string, unknown> = { stockCheckedAt: { stringValue: new Date().toISOString() } };
+        const mask = ["stockCheckedAt"];
+        if (qty !== undefined) {
+          f.stock = qty === null ? { nullValue: null } : { integerValue: String(qty) }; mask.push("stock");
+          f.lowStock = { booleanValue: qty !== null && qty < LOW_STOCK }; mask.push("lowStock");
+          if (sp) { f.supplierMoq = { integerValue: String(a!.moq) }; f.stockModels = { arrayValue: { values: modelsOf(sp).map((m) => ({ mapValue: { fields: { type: { stringValue: m.type }, qty: { integerValue: String(m.qty) } } } })) } }; mask.push("supplierMoq", "stockModels"); }
+          if (qty !== null && qty < LOW_STOCK) low++;
+        }
+        if (out === true && o.status === "active") { f.status = { stringValue: "hidden" }; f.outOfStock = { booleanValue: true }; mask.push("status", "outOfStock"); hidden++; }
+        else if (out === false && o.oos && o.status === "hidden") { f.status = { stringValue: "active" }; f.outOfStock = { booleanValue: false }; mask.push("status", "outOfStock"); restored++; }
+        writes.push({ update: { name: o.name, fields: f }, updateMask: { fieldPaths: mask } });
       }
       if (!cat.complete) notes.push(`${host}: الوقت خلص قبل ما يقرا كل الأقسام`);
     }
     for (let i = 0; i < writes.length; i += 400) await fs(`:commit`, { method: "POST", body: JSON.stringify({ writes: writes.slice(i, i + 400) }) });
 
-    const result = { at: new Date().toISOString(), checked, hidden, restored, gone, seconds: Math.round((Date.now() - started) / 1000), note: notes.join(" | "), by: cronOk ? "cron" : "admin" };
+    const result = { at: new Date().toISOString(), checked, hidden, restored, gone, low, seconds: Math.round((Date.now() - started) / 1000), note: notes.join(" | "), by: cronOk ? "cron" : "admin" };
     await log(result);
-    if (hidden || restored) revalidateTag(CATALOG_TAG); // visitors stop seeing sold-out items right away
+    if (checked) revalidateTag(CATALOG_TAG); // visitors see today's quantities and stop seeing sold-out items
     return Response.json(result);
   } catch (e) {
     const msg = String((e as Error)?.message || e);

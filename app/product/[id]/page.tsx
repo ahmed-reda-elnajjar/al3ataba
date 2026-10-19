@@ -46,7 +46,10 @@ export default function ProductPage() {
   const offerOn = pmin > 0 && offerHave + q >= pmin;
   const price = priceFor(offerOn && p.promo?.tiers ? p.promo.tiers : p.tiers, qty || p.moq);
   const inCart = items.some((i) => i.id === cartId);
+  const stock = typeof p.stock === "number" ? p.stock : null; // supplier quantity, refreshed daily
+  const tooMany = stock !== null && q > stock;
   const addToCart = () => {
+    if (tooMany) return;
     track("cart", p);
     add({ id: cartId, productId: p.id, name: color ? `${p.name} (${color})` : p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: q, price: priceFor(p.tiers, q), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod, ...cartPromoFields(p) });
     router.push("/cart");
@@ -99,7 +102,12 @@ export default function ProductPage() {
             </div>
             <div className="sp"><small>الإجمالي</small><div className="price" style={{ fontSize: 24 }}>{fmt(q * price)} ج.م</div></div>
           </div>
-          <button className="btn blk" onClick={addToCart}><i className="ph ph-shopping-cart" />{inCart ? "تحديث السلة" : "أضف إلى السلة"}</button>
+          {stock !== null && (
+            <small style={{ color: tooMany ? "#b3261e" : stock < 100 ? "#b25e00" : "#1e6b43", fontWeight: 600 }}>
+              <i className={`ph ${tooMany ? "ph-warning" : "ph-package"}`} /> {tooMany ? `المتاح دلوقتي ${fmt(stock)} ${p.unit} بس — قلّل الكمية` : stock < 100 ? `باقي ${fmt(stock)} ${p.unit} بس` : `متوفر ${fmt(stock)} ${p.unit}`}
+            </small>
+          )}
+          <button className="btn blk" onClick={addToCart} disabled={tooMany}><i className="ph ph-shopping-cart" />{inCart ? "تحديث السلة" : "أضف إلى السلة"}</button>
           <b style={{ marginTop: 6 }}>معلومات التاجر</b>
           <Link href={`/store/${p.merchantId}`} className="card row">
             <Img ic="ph-storefront" ratio={1} style={{ width: 56, borderRadius: 12 }} />

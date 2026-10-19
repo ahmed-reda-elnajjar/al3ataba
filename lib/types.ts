@@ -4,6 +4,8 @@ export type PStatus = "active" | "pending" | "hidden";
 export type Product = {
   id: string; name: string; description: string; categoryId: string; categoryName: string;
   extraCats?: string[]; // more categories the product also shows in (categoryId stays the main one)
+  source?: string | null; sourceId?: string | null; outOfStock?: boolean; // linked supplier product ("host:id")
+  stock?: number | null; stockModels?: { type: string; qty: number }[]; supplierMoq?: number; stockCheckedAt?: string; // supplier stock, refreshed daily
   resellOff?: boolean; resellMode?: "both" | "retail" | "wholesale"; resellCommission?: number | null; // selling on commission (resellers)
   unit: string; moq: number; tiers: Tier[]; governorate: string;
   merchantId: string; merchantName: string; ownerUid: string;

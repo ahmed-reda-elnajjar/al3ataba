@@ -14,7 +14,7 @@ import { saveRules } from "@/lib/rules";
 import { createSupplier, listSuppliers } from "@/lib/suppliers";
 import { RulesEditor } from "@/components/Markup";
 import { StockSync } from "@/components/StockSync";
-import { availability } from "@/lib/stock";
+import { LOW_STOCK, availability, modelsOf } from "@/lib/stock";
 import type { Category, Product } from "@/lib/types";
 
 /* Imports a partner's catalogue from a 6valley (6amTech) store — e.g. alwazeers.com — through its public API. */
@@ -204,10 +204,49 @@ export default function ImportSite() {
     setRows((rs) => rs.map((r) => (soldOutHere.includes(r) ? { ...r, docStatus: "hidden", note: "اتخفى (خلصان)" } : r)));
     setHmsg(`اتخفى ${k} منتج ✓`);
   };
+  /** Link every product you already have (same supplier id, or same name) to this supplier + copy today's quantities.
+   *  From then on the daily sync updates their stock, hides sold-out ones and flags low stock — in every category. */
+  const linkAll = async (supplierChoice: string) => {
+    let supplierId = supplierChoice;
+    if (supplierId === "__new") { const n = prompt("اسم المورد (للإدارة بس):", currentSrc?.name || "الوزير")?.trim(); if (!n) return ""; supplierId = (await createSupplier(n)).id; sup.reload(); }
+    const used = new Set<string>();
+    const list = rows.filter((x) => x.docId && !used.has(x.docId) && (used.add(x.docId), true));
+    if (!list.length) return "مفيش منتجات عندك متطابقة.";
+    if (!confirm(`ربط ${list.length} منتج عندك بالمورد ده وتحديث كمياتهم؟ (منهم ${list.filter((x) => x.byName).length} متطابقين بالاسم بس)`)) return "";
+    let bt = writeBatch(dbI()), k = 0;
+    for (const x of list) {
+      const a = availability(x.src);
+      bt.update(doc(dbI(), "products", x.docId!), {
+        source: "6valley", sourceId: x.key, ...(supplierId ? { supplierId } : {}),
+        stock: a.stock, stockModels: modelsOf(x.src), supplierMoq: a.moq, lowStock: a.stock !== null && a.stock < LOW_STOCK,
+        outOfStock: a.out, stockCheckedAt: new Date().toISOString(),
+      });
+      if (++k % 400 === 0) { await bt.commit(); bt = writeBatch(dbI()); }
+    }
+    await bt.commit(); touchCatalog();
+    setRows((rs) => rs.map((x) => (x.docId ? { ...x, byName: false } : x)));
+    if (supplierId && currentSrc && currentSrc.supplierId !== supplierId) await saveSources(sources.map((x) => (cleanUrl(x.url) === cleanUrl(currentSrc.url) ? { ...x, supplierId } : x)));
+    return `اتربط ${k} منتج ✓ وكمياتهم اتحدّثت. من دلوقتي الفحص اليومي بيحدّثهم لوحده.`;
+  };
   const chosen = visible.filter((r) => r.on && r.state !== "ok");
   const srcCatIds = useMemo(() => Array.from(new Set(rows.map((r) => r.cat))), [rows]);
   const catName = (id: string) => srcCats.find((c) => String(c.id) === id)?.name || `قسم رقم ${id}`;
 
+  // "add" from the review report: tick exactly those products, open the add section and start right away
+  const [addOpen, setAddOpen] = useState(false);
+  const [autoRun, setAutoRun] = useState(false);
+  const addKeys = (keys: string[]) => {
+    const want = new Set(keys);
+    setRows((rs) => rs.map((x) => (x.state === "ok" ? x : { ...x, on: want.has(x.key) })));
+    setHideOut(false); setOnlyPublished(false); setAddOpen(true); setAutoRun(true);
+  };
+  useEffect(() => {
+    if (!autoRun || running) return;
+    setAutoRun(false);
+    setTimeout(() => document.getElementById("add-products")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun, rows]);
   const run = async () => {
     if (!user) return;
     const m = owner === HOUSE.id ? { id: HOUSE.id, name: HOUSE.name, governorate: "القاهرة" } : merchants.data?.find((x) => x.id === owner);
@@ -245,14 +284,15 @@ export default function ImportSite() {
         const colors = (p.colors_formatted?.length ? p.colors_formatted.map((x) => COLOR_AR[x.name.toLowerCase()] || x.name) : arr<string>(p.colors)).filter(Boolean);
         const specs = inStockOptions(p).map((o) => ({ k: o.title, v: (o.options || []).join("، ") })).filter((s) => s.k && s.v);
         if (p.code) specs.push({ k: "كود المنتج", v: String(p.code) });
-        await addDoc(collection(dbI(), "products"), {
+        const ref = await addDoc(collection(dbI(), "products"), {
           name, description: strip(p.details), categoryId: c.id, categoryName: c.name, unit: packOf(r) > 1 ? "شريحة" : p.unit === "pc" || !p.unit ? "قطعة" : p.unit, moq: q,
           tiers, basePrices: [unitBase(r)], markup: null, markupTiers: r.edited ? null : tiersFromRules(unitBase(r), rules).rule?.tiers ?? null, packSize: packOf(r) > 1 ? packOf(r) : null, governorate: m.governorate || "القاهرة", images, media: images, colors, specs,
           cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, supplierId: supplierId || null, ownerUid: user.uid, source: "6valley", sourceId: r.key, createdAt: serverTimestamp(),
-        }).then((ref) => { newIds.push(ref.id); });
-        upd(r.key, { state: "ok", note: "" }); setDone((d) => d + 1);
+          stock: availability(p).stock, stockModels: modelsOf(p), supplierMoq: availability(p).moq, lowStock: (availability(p).stock ?? Infinity) < LOW_STOCK, stockCheckedAt: new Date().toISOString(),
+        }).then((x) => { newIds.push(x.id); return x; });
+        upd(r.key, { state: "ok", note: "اتضاف للمراجعة", docId: ref.id, docStatus: "pending", on: false }); setDone((d) => d + 1);
       } catch { upd(r.key, { state: "err", note: "فشل الحفظ" }); }
     }
     setRunning(false);
@@ -303,9 +343,9 @@ export default function ImportSite() {
         </details>
       </div>
 
-      {rows.length > 0 && <Review rows={rows} catName={catName} onHide={hideSoldOut} hmsg={hmsg} />}
+      {rows.length > 0 && <Review rows={rows} catName={catName} onHide={hideSoldOut} hmsg={hmsg} suppliers={sup.data ?? []} defaultSupplier={currentSrc?.supplierId || ""} onLink={linkAll} onAdd={addKeys} adding={running} />}
       {rows.length > 0 && (
-        <details className="card col" style={{ gap: 12 }}>
+        <details id="add-products" className="card col" style={{ gap: 12 }} open={addOpen} onToggle={(e) => setAddOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary style={{ cursor: "pointer", fontWeight: 700 }}>إضافة منتجات جديدة للموقع (اختياري — مفيش حاجة بتتضاف غير لما تعلّم عليها وتدوس إضافة)</summary>
           <div className="card col">
             <b>ربط الأقسام</b>
@@ -368,8 +408,11 @@ export default function ImportSite() {
 }
 
 /* ---------- review report: what the supplier has vs what's on our site, with stock per product ---------- */
-function Review({ rows, catName, onHide, hmsg }: { rows: Row[]; catName: (id: string) => string; onHide: () => void; hmsg: string }) {
+function Review({ rows, catName, onHide, hmsg, suppliers, defaultSupplier, onLink, onAdd, adding }: { rows: Row[]; catName: (id: string) => string; onHide: () => void; hmsg: string; suppliers: { id: string; name: string }[]; defaultSupplier: string; onLink: (supplierId: string) => Promise<string>; onAdd: (keys: string[]) => void; adding: boolean }) {
   const [f, setF] = useState("all"); const [q, setQ] = useState("");
+  const [sid, setSid] = useState(defaultSupplier || suppliers.find((x) => /وزير/.test(x.name))?.id || "");
+  const [lmsg, setLmsg] = useState(""); const [busy, setBusy] = useState(false);
+  const [pick, setPick] = useState<string[]>([]);
   const on = (r: Row) => !!r.docId;
   const st = (r: Row) => (!r.docId ? "مش موجود عندك" : r.docStatus === "active" ? "منشور عندك" : r.docStatus === "pending" ? "عندك (مستني مراجعة)" : "عندك (مخفي)");
   const models = (r: Row) => arr<{ type?: string; qty?: number | string }>(r.src.variation).filter((v) => v && v.type).map((v) => `${v.type}: ${Number(v.qty) || 0}`);
@@ -381,8 +424,9 @@ function Review({ rows, catName, onHide, hmsg }: { rows: Row[]; catName: (id: st
     out: (r) => r.out,
     danger: (r) => r.out && !r.byName && r.docStatus === "active",
     back: (r) => !r.out && on(r) && r.docStatus === "hidden",
+    low: (r) => !r.out && r.stock !== null && r.stock < LOW_STOCK,
   };
-  const label: Record<string, string> = { all: "الكل", have: "موجود عندك", missing: "مش موجود عندك", missingAvail: "مش موجود ومتاح عندهم", out: "خلصان عند المورد", danger: "منشور عندك وخلصان عندهم", back: "مخفي عندك ورجع متاح" };
+  const label: Record<string, string> = { all: "الكل", have: "موجود عندك", missing: "مش موجود عندك", missingAvail: "مش موجود ومتاح عندهم", out: "خلصان عند المورد", danger: "منشور عندك وخلصان عندهم", back: "مخفي عندك ورجع متاح", low: `أقل من ${LOW_STOCK} قطعة` };
   const n = (k: string) => rows.filter(groups[k]).length;
   const t = norm(q);
   const list = rows.filter(groups[f]).filter((r) => !t || norm(r.name).includes(t)).sort((a, b) => (b.stock ?? -1) - (a.stock ?? -1));
@@ -405,23 +449,47 @@ function Review({ rows, catName, onHide, hmsg }: { rows: Row[]; catName: (id: st
       </div>
       {n("danger") > 0 && <div className="alert row wrap" style={{ gap: 8 }}><span className="sp"><b>{n("danger")}</b> منتج منشور عندك والمورد مبقاش عنده كمية تكفي أقل طلب.</span><button className="btn r sm2" onClick={onHide}>إخفاءهم من الموقع</button></div>}
       {n("back") > 0 && <div className="alert row wrap" style={{ gap: 8 }}><span className="sp"><b>{n("back")}</b> منتج مخفي عندك ورجع متاح عند المورد — تقدر تنشره تاني من المنتجات.</span></div>}
+      {n("low") > 0 && <div className="alert row wrap" style={{ gap: 8, borderColor: "var(--warn)" }}><i className="ph ph-warning" style={{ color: "var(--warn)" }} /><span className="sp"><b>{n("low")}</b> منتج المخزون عند المورد أقل من {LOW_STOCK} قطعة — ممكن يخلص قريب.</span><button className="btn o sm2" onClick={() => setF("low")}>اعرضهم</button></div>}
       {hmsg && <span className="ok">{hmsg}</span>}
+      <div className="card col" style={{ gap: 8, background: "var(--cream)" }}>
+        <b>ربط منتجاتك بالمورد ده</b>
+        <small className="mu">بيعلّم كل المنتجات الموجودة عندك ({n("have")}) إنها جاية من المورد ده، وبينقل كمياتهم دلوقتي. بعد كده الفحص اليومي بيحدّث الكميات لوحده، ويخفي اللي يخلص، ويرجّع اللي يرجع، وينبّهك لو أي منتج قلّ عن {LOW_STOCK} قطعة. وده بيشتغل على أي قسم.</small>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <select className="in" style={{ maxWidth: 240 }} value={sid} onChange={(e) => setSid(e.target.value)}><option value="">من غير اسم مورد</option>{suppliers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}<option value="__new">+ مورد جديد…</option></select>
+          <button className="btn" disabled={busy || !n("have")} onClick={async () => { setBusy(true); setLmsg(""); try { setLmsg(await onLink(sid)); } catch (e) { setLmsg(`مشكلة: ${String((e as Error).message)}`); } setBusy(false); }}><i className="ph ph-link" />{busy ? "جاري الربط…" : `اربط ${n("have")} منتج وحدّث الكميات`}</button>
+        </div>
+        {lmsg && <span className="ok">{lmsg}</span>}
+      </div>
       <div className="scr">{Object.keys(groups).map((k) => <button key={k} className={`chip${f === k ? " on" : ""}`} onClick={() => setF(k)}>{label[k]} ({n(k)})</button>)}</div>
       <input className="in" placeholder="ابحث باسم المنتج" value={q} onChange={(e) => setQ(e.target.value)} />
+      {(() => {
+        const addable = list.filter((r) => !r.docId);
+        if (!addable.length) return null;
+        const avail = addable.filter((r) => !r.out);
+        const sel = pick.filter((k) => addable.some((r) => r.key === k));
+        return (
+          <div className="row wrap" style={{ gap: 8 }}>
+            <span className="sp"><b>{addable.length}</b> منتج مش موجود عندك في القائمة دي{sel.length ? ` · ${sel.length} متعلّم` : ""}</span>
+            {sel.length > 0 && <button className="btn sm2" disabled={adding} onClick={() => { onAdd(sel); setPick([]); }}><i className="ph ph-plus" />أضف المتعلّم ({sel.length})</button>}
+            <button className="btn o sm2" disabled={adding || !avail.length} onClick={() => onAdd(avail.map((r) => r.key))}><i className="ph ph-plus-circle" />{adding ? "جاري الإضافة…" : `أضف كل المتاح منهم (${avail.length})`}</button>
+          </div>
+        );
+      })()}
       <div style={{ overflowX: "auto" }}>
         <table className="tbl">
-          <thead><tr>{["", "المنتج", "عندك", "المخزون عندهم", "أقل طلب", "السعر عندهم"].map((h) => <th key={h} style={{ textAlign: "start", fontSize: 12.5, color: "var(--mu)" }}>{h}</th>)}</tr></thead>
+          <thead><tr>{["", "", "المنتج", "عندك", "المخزون عندهم", "أقل طلب", "السعر عندهم"].map((h, i) => <th key={i} style={{ textAlign: "start", fontSize: 12.5, color: "var(--mu)" }}>{h}</th>)}</tr></thead>
           <tbody>
             {list.slice(0, 800).map((r) => {
               const a = availability(r.src), ms = models(r);
               return (
                 <tr key={r.key}>
+                  <td style={{ width: 30 }}>{!r.docId && <input type="checkbox" aria-label="اختيار" checked={pick.includes(r.key)} onChange={(e) => setPick(e.target.checked ? [...pick, r.key] : pick.filter((k) => k !== r.key))} style={{ width: 18, height: 18, accentColor: "var(--pa)" }} />}</td>
                   <td style={{ width: 52 }}>{r.imgs[0] ? <img src={r.imgs[0]} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8 }} loading="lazy" /> : null}</td>
                   <td style={{ fontSize: 13.5 }}>{r.name}<br /><small className="mu">{catName(r.cat)}{ms.length ? ` · الموديلات: ${ms.join("، ")}` : ""}</small></td>
                   <td style={{ fontSize: 13 }}>{r.docId ? <a href={`/admin/products/${r.docId}`} target="_blank" rel="noreferrer" style={{ color: "var(--pm)" }}>{st(r)}</a> : <span className="mu">{st(r)}</span>}{r.byName ? <><br /><small className="mu">(متطابق بالاسم)</small></> : null}</td>
-                  <td><b style={{ color: r.out ? "#b3261e" : "#1e6b43" }}>{r.stock === null ? "غير محدد" : r.stock.toLocaleString("en-US")}</b>{r.out ? <><br /><small style={{ color: "#b3261e" }}>خلصان</small></> : null}</td>
+                  <td><b style={{ color: r.out ? "#b3261e" : r.stock !== null && r.stock < LOW_STOCK ? "#b25e00" : "#1e6b43" }}>{r.stock === null ? "غير محدد" : r.stock.toLocaleString("en-US")}</b>{r.out ? <><br /><small style={{ color: "#b3261e" }}>خلصان</small></> : null}</td>
                   <td>{a.moq}</td>
-                  <td>{r.base} ج.م</td>
+                  <td>{r.base} ج.م{!r.docId && <><br /><button className="btn sm2" style={{ marginTop: 4, minHeight: 28, padding: "0 10px" }} disabled={adding || r.state === "busy"} onClick={() => onAdd([r.key])}>{r.state === "ok" ? "اتضاف ✓" : "أضف"}</button></>}</td>
                 </tr>
               );
             })}
