@@ -103,8 +103,8 @@ function buildPrompt(read: Read, name: string, variant: string, extra: string) {
   ].filter(Boolean).join("\n");
 }
 
-async function geminiImage(b64: string, prompt: string): Promise<{ data: string; by: string } | { error: string }> {
-  try { const r = await redraw(b64, prompt); return { data: r.dataUrl, by: r.by }; }
+async function geminiImage(b64: string, prompt: string, small?: string): Promise<{ data: string; by: string } | { error: string }> {
+  try { const r = await redraw(b64, prompt, small); return { data: r.dataUrl, by: r.by }; }
   catch (e) { return { error: String((e as Error).message) }; }
 }
 
@@ -162,7 +162,7 @@ export async function POST(req: Request) {
     const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
     // redraw needs what's written on the product first, so it can draw the right connectors/ports
     const read = await readText(b64);
-    const gen = mode === "gemini" ? await geminiImage(b64, buildPrompt(read, name || "", variant || "auto", clean(prompt))) : null;
+    const gen = mode === "gemini" ? await geminiImage(b64, buildPrompt(read, name || "", variant || "auto", clean(prompt)), sized(url, 500).replace("w_500,c_limit", "w_500,h_500,c_limit").replace("f_auto", "f_jpg")) : null;
     let image = "", method = "";
     if (gen && "data" in gen) {
       image = await upload(gen.data); method = "ai";

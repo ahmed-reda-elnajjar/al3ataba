@@ -232,6 +232,15 @@ export default function ImportSite() {
   const srcCatIds = useMemo(() => Array.from(new Set(rows.map((r) => r.cat))), [rows]);
   const catName = (id: string) => srcCats.find((c) => String(c.id) === id)?.name || `قسم رقم ${id}`;
 
+  /** Hide / publish products that are already on the site (from the review report). */
+  const setStatusOf = async (docIds: string[], status: "hidden" | "active") => {
+    const ids = Array.from(new Set(docIds.filter(Boolean)));
+    if (!ids.length) return;
+    let bt = writeBatch(dbI()), k = 0;
+    for (const id of ids) { bt.update(doc(dbI(), "products", id), { status, ...(status === "active" ? { outOfStock: false } : {}) }); if (++k % 400 === 0) { await bt.commit(); bt = writeBatch(dbI()); } }
+    await bt.commit(); touchCatalog();
+    setRows((rs) => rs.map((x) => (x.docId && ids.includes(x.docId) ? { ...x, docStatus: status } : x)));
+  };
   // "add" from the review report: tick exactly those products, open the add section and start right away
   const [addOpen, setAddOpen] = useState(false);
   const [autoRun, setAutoRun] = useState(false);
@@ -343,7 +352,7 @@ export default function ImportSite() {
         </details>
       </div>
 
-      {rows.length > 0 && <Review rows={rows} catName={catName} onHide={hideSoldOut} hmsg={hmsg} suppliers={sup.data ?? []} defaultSupplier={currentSrc?.supplierId || ""} onLink={linkAll} onAdd={addKeys} adding={running} />}
+      {rows.length > 0 && <Review rows={rows} catName={catName} onHide={hideSoldOut} hmsg={hmsg} suppliers={sup.data ?? []} defaultSupplier={currentSrc?.supplierId || ""} onLink={linkAll} onAdd={addKeys} adding={running} onStatus={setStatusOf} />}
       {rows.length > 0 && (
         <details id="add-products" className="card col" style={{ gap: 12 }} open={addOpen} onToggle={(e) => setAddOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary style={{ cursor: "pointer", fontWeight: 700 }}>إضافة منتجات جديدة للموقع (اختياري — مفيش حاجة بتتضاف غير لما تعلّم عليها وتدوس إضافة)</summary>
@@ -408,11 +417,13 @@ export default function ImportSite() {
 }
 
 /* ---------- review report: what the supplier has vs what's on our site, with stock per product ---------- */
-function Review({ rows, catName, onHide, hmsg, suppliers, defaultSupplier, onLink, onAdd, adding }: { rows: Row[]; catName: (id: string) => string; onHide: () => void; hmsg: string; suppliers: { id: string; name: string }[]; defaultSupplier: string; onLink: (supplierId: string) => Promise<string>; onAdd: (keys: string[]) => void; adding: boolean }) {
+function Review({ rows, catName, onHide, hmsg, suppliers, defaultSupplier, onLink, onAdd, adding, onStatus }: { rows: Row[]; catName: (id: string) => string; onHide: () => void; hmsg: string; suppliers: { id: string; name: string }[]; defaultSupplier: string; onLink: (supplierId: string) => Promise<string>; onAdd: (keys: string[]) => void; adding: boolean; onStatus: (docIds: string[], status: "hidden" | "active") => Promise<void> }) {
   const [f, setF] = useState("all"); const [q, setQ] = useState("");
   const [sid, setSid] = useState(defaultSupplier || suppliers.find((x) => /وزير/.test(x.name))?.id || "");
   const [lmsg, setLmsg] = useState(""); const [busy, setBusy] = useState(false);
   const [pick, setPick] = useState<string[]>([]);
+  const [sbusy, setSbusy] = useState(false);
+  const status = async (ids: string[], st: "hidden" | "active") => { setSbusy(true); try { await onStatus(ids, st); } catch (e) { alert(String((e as Error).message)); } setSbusy(false); };
   const on = (r: Row) => !!r.docId;
   const st = (r: Row) => (!r.docId ? "مش موجود عندك" : r.docStatus === "active" ? "منشور عندك" : r.docStatus === "pending" ? "عندك (مستني مراجعة)" : "عندك (مخفي)");
   const models = (r: Row) => arr<{ type?: string; qty?: number | string }>(r.src.variation).filter((v) => v && v.type).map((v) => `${v.type}: ${Number(v.qty) || 0}`);
@@ -463,6 +474,22 @@ function Review({ rows, catName, onHide, hmsg, suppliers, defaultSupplier, onLin
       <div className="scr">{Object.keys(groups).map((k) => <button key={k} className={`chip${f === k ? " on" : ""}`} onClick={() => setF(k)}>{label[k]} ({n(k)})</button>)}</div>
       <input className="in" placeholder="ابحث باسم المنتج" value={q} onChange={(e) => setQ(e.target.value)} />
       {(() => {
+        const mine = list.filter((r) => r.docId);
+        if (!mine.length) return null;
+        const sel = mine.filter((r) => pick.includes(r.key));
+        const ids = (l: Row[]) => l.map((r) => r.docId!);
+        return (
+          <div className="row wrap" style={{ gap: 8 }}>
+            <span className="sp"><b>{mine.length}</b> منتج موجود عندك في القائمة دي{sel.length ? ` · ${sel.length} متعلّم` : ""}</span>
+            <button className="btn o sm2" onClick={() => setPick(sel.length === mine.length ? pick.filter((k) => !mine.some((r) => r.key === k)) : Array.from(new Set([...pick, ...mine.map((r) => r.key)])))}>{sel.length === mine.length ? "شيل العلامات" : "علّم الكل"}</button>
+            {sel.length > 0 && <>
+              <button className="btn r sm2" disabled={sbusy} onClick={() => confirm(`إخفاء ${sel.length} منتج من الموقع؟`) && status(ids(sel), "hidden")}><i className="ph ph-eye-slash" />إخفاء المتعلّم ({sel.length})</button>
+              <button className="btn sm2" disabled={sbusy} onClick={() => status(ids(sel), "active")}><i className="ph ph-eye" />نشر المتعلّم</button>
+            </>}
+          </div>
+        );
+      })()}
+      {(() => {
         const addable = list.filter((r) => !r.docId);
         if (!addable.length) return null;
         const avail = addable.filter((r) => !r.out);
@@ -483,13 +510,18 @@ function Review({ rows, catName, onHide, hmsg, suppliers, defaultSupplier, onLin
               const a = availability(r.src), ms = models(r);
               return (
                 <tr key={r.key}>
-                  <td style={{ width: 30 }}>{!r.docId && <input type="checkbox" aria-label="اختيار" checked={pick.includes(r.key)} onChange={(e) => setPick(e.target.checked ? [...pick, r.key] : pick.filter((k) => k !== r.key))} style={{ width: 18, height: 18, accentColor: "var(--pa)" }} />}</td>
+                  <td style={{ width: 30 }}>{<input type="checkbox" aria-label="اختيار" checked={pick.includes(r.key)} onChange={(e) => setPick(e.target.checked ? [...pick, r.key] : pick.filter((k) => k !== r.key))} style={{ width: 18, height: 18, accentColor: "var(--pa)" }} />}</td>
                   <td style={{ width: 52 }}>{r.imgs[0] ? <img src={r.imgs[0]} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8 }} loading="lazy" /> : null}</td>
                   <td style={{ fontSize: 13.5 }}>{r.name}<br /><small className="mu">{catName(r.cat)}{ms.length ? ` · الموديلات: ${ms.join("، ")}` : ""}</small></td>
                   <td style={{ fontSize: 13 }}>{r.docId ? <a href={`/admin/products/${r.docId}`} target="_blank" rel="noreferrer" style={{ color: "var(--pm)" }}>{st(r)}</a> : <span className="mu">{st(r)}</span>}{r.byName ? <><br /><small className="mu">(متطابق بالاسم)</small></> : null}</td>
                   <td><b style={{ color: r.out ? "#b3261e" : r.stock !== null && r.stock < LOW_STOCK ? "#b25e00" : "#1e6b43" }}>{r.stock === null ? "غير محدد" : r.stock.toLocaleString("en-US")}</b>{r.out ? <><br /><small style={{ color: "#b3261e" }}>خلصان</small></> : null}</td>
                   <td>{a.moq}</td>
-                  <td>{r.base} ج.م{!r.docId && <><br /><button className="btn sm2" style={{ marginTop: 4, minHeight: 28, padding: "0 10px" }} disabled={adding || r.state === "busy"} onClick={() => onAdd([r.key])}>{r.state === "ok" ? "اتضاف ✓" : "أضف"}</button></>}</td>
+                  <td>{r.base} ج.م{r.docId && <div className="row wrap" style={{ gap: 4, marginTop: 4 }}>
+                    <a className="btn o sm2" style={{ minHeight: 28, padding: "0 10px" }} href={`/admin/products/${r.docId}`} target="_blank" rel="noreferrer"><i className="ph ph-pencil-simple" />تعديل</a>
+                    {r.docStatus === "active"
+                      ? <button className="btn r sm2" style={{ minHeight: 28, padding: "0 10px" }} disabled={sbusy} onClick={() => status([r.docId!], "hidden")}>إخفاء</button>
+                      : <button className="btn sm2" style={{ minHeight: 28, padding: "0 10px" }} disabled={sbusy} onClick={() => status([r.docId!], "active")}>نشر</button>}
+                  </div>}{!r.docId && <><br /><button className="btn sm2" style={{ marginTop: 4, minHeight: 28, padding: "0 10px" }} disabled={adding || r.state === "busy"} onClick={() => onAdd([r.key])}>{r.state === "ok" ? "اتضاف ✓" : "أضف"}</button></>}</td>
                 </tr>
               );
             })}

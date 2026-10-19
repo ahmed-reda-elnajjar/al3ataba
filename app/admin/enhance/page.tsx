@@ -1,8 +1,9 @@
 "use client";
 import { productCats } from "@/lib/cats";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, doc, getDocs, writeBatch } from "firebase/firestore";
+import { touchCatalog } from "@/lib/catalogClient";
 import { dbI } from "@/lib/firebase";
 import { useAsync } from "@/lib/hooks";
 import { useApp } from "@/lib/providers";
@@ -32,6 +33,21 @@ export default function EnhancePage() {
       && (flt === "all" || (flt === "noimg" && !p.studio) || (flt === "notext" && !p.aiCopy) || (flt === "pending" && p.status === "pending")));
   }, [all, cat, flt, q]);
   const chosen = all.filter((p) => sel.includes(p.id));
+  // coming from the products page with "حسّن المتعلّم": ?ids=a,b,c → preselect them
+  useEffect(() => {
+    const ids = new URLSearchParams(window.location.search).get("ids");
+    if (ids) setSel(ids.split(",").filter(Boolean));
+  }, []);
+  const [smsg, setSmsg] = useState("");
+  /** Hide / publish the selected products right from here. */
+  const setStatus = async (status: "hidden" | "active") => {
+    if (!chosen.length) return;
+    if (status === "hidden" && !confirm(`إخفاء ${chosen.length} منتج من الموقع؟ (تقدر تنشرهم تاني)`)) return;
+    let bt = writeBatch(dbI()), k = 0;
+    for (const p of chosen) { bt.update(doc(dbI(), "products", p.id), { status }); if (++k % 400 === 0) { await bt.commit(); bt = writeBatch(dbI()); } }
+    await bt.commit(); touchCatalog(); reload();
+    setSmsg(status === "hidden" ? `اتخفى ${k} منتج ✓` : `اتنشر ${k} منتج ✓`);
+  };
   const toggle = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   // ---- studio photos (preview → approve)
@@ -143,13 +159,19 @@ export default function EnhancePage() {
           <button className="btn o sm2" onClick={() => setSel(Array.from(new Set([...sel, ...shown.map((p) => p.id)])))}>علّم المعروض ({shown.length})</button>
           <button className="btn o sm2" onClick={() => setSel([])}>شيل العلامات</button>
           <b className="sp">{sel.length} منتج مختار</b>
+          {sel.length > 0 && <>
+            <button className="btn r sm2" onClick={() => setStatus("hidden")}><i className="ph ph-eye-slash" />إخفاء المختار</button>
+            <button className="btn o sm2" onClick={() => setStatus("active")}><i className="ph ph-eye" />نشر المختار</button>
+          </>}
         </div>
+        {smsg && <span className="ok">{smsg}</span>}
         <div className="pick" style={{ maxHeight: 360 }}>
           {loading ? <small style={{ padding: 12, display: "block" }}>جاري التحميل…</small> : shown.slice(0, 300).map((p) => (
             <label key={p.id}>
               <input type="checkbox" checked={sel.includes(p.id)} onChange={() => toggle(p.id)} />
               {p.images?.[0] ? <img src={sized(p.images[0], 80)} alt="" /> : <i className="ph ph-package" />}
-              <span className="sp" style={{ minWidth: 0 }}>{p.name}<br /><small>{p.categoryName}{p.studio ? " · صورة استوديو ✓" : ""}{p.aiCopy ? " · وصف ✓" : ""}</small></span>
+              <span className="sp" style={{ minWidth: 0 }}>{p.name}<br /><small>{p.categoryName}{p.status !== "active" ? ` · ${p.status === "hidden" ? "مخفي" : "مستني المراجعة"}` : ""}{p.studio ? " · صورة استوديو ✓" : ""}{p.aiCopy ? " · وصف ✓" : ""}</small></span>
+              <a href={`/admin/products/${p.id}`} target="_blank" rel="noreferrer" className="btn o sm2" style={{ minHeight: 28, padding: "0 10px", flex: "none" }} onClick={(e) => e.stopPropagation()}><i className="ph ph-pencil-simple" />تعديل</a>
             </label>
           ))}
           {!loading && !shown.length && <small style={{ padding: 12, display: "block" }}>مفيش منتجات.</small>}
@@ -161,7 +183,7 @@ export default function EnhancePage() {
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>صور استوديو:</b>
           <button className={`chip${mode === "extract" ? " on" : ""}`} onClick={() => setMode("extract")}>قص المنتج بالذكاء الاصطناعي (مُستحسن)</button>
-          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة رسم بالذكاء الاصطناعي (Meta / Gemini / OpenRouter / Grok)</button>
+          <button className={`chip${mode === "gemini" ? " on" : ""}`} onClick={() => setMode("gemini")}>إعادة رسم بالذكاء الاصطناعي (Cloudflare مجاني / Meta / Gemini / OpenRouter / Grok)</button>
         </div>
         <div className="row wrap g8">
           <b style={{ minWidth: 90 }}>الخلفية:</b>
@@ -186,7 +208,7 @@ export default function EnhancePage() {
           <div className="row wrap g8"><b className="sp">معاينة صور الاستوديو</b>
             <small className="mu">التعديل بالكلام:</small>
             <button className={`chip${engine === "auto" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("auto")}>ذكاء اصطناعي ببلاش</button>
-            <button className={`chip${engine === "gemini" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("gemini")}>إعادة رسم (Meta / Gemini / OpenRouter / Grok)</button>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
+            <button className={`chip${engine === "gemini" ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => setEngine("gemini")}>إعادة رسم (Cloudflare مجاني / Meta / Gemini / OpenRouter / Grok)</button>{readyN > 0 && <button className="btn sm2" onClick={approveAll}><i className="ph ph-check" />اعتمد الكل ({readyN})</button>}</div>
           <small className="mu">بص على كل صورة: لو المنتج اتغيّر أو حاجة ناقصة دوس "ارفض". مفيش حاجة بتتحفظ غير لما تعتمد. لما تعتمد، الصورة الجديدة بتبقى الصورة الرئيسية والصور الأصلية بتفضل موجودة بعدها في المعرض.</small>
           <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 2, gap: 12 }}>
             {previews.map((p) => { const pr = prev[p.id]; return (

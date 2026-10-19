@@ -114,7 +114,7 @@ export default function AdminProducts() {
   const revDone = (data ?? []).filter(isRev).length;
   const isLow = (p: Product) => typeof p.stock === "number" && p.stock < 100;
   const lowN = (data ?? []).filter((p) => p.status === "active" && isLow(p)).length;
-  const list = (data ?? []).filter((p) => (f === "all" || (f === "low" ? p.status === "active" && isLow(p) : p.status === f)) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
+  const list = (data ?? []).filter((p) => (f === "all" || (f === "low" ? p.status === "active" && isLow(p) : f === "noimg" ? !p.studio : f === "notext" ? !p.aiCopy : p.status === f)) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
   return (
     <>
       <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
@@ -125,22 +125,24 @@ export default function AdminProducts() {
           <button className="btn gd sm2" onClick={() => { setF("pending"); setSel([]); }}><i className="ph ph-eye" />مراجعة</button>
         </div>
       )}
-      {f === "pending" && (
+      {(f === "pending" || f === "noimg" || f === "notext" || f === "low" || sel.length > 0) && (
         <div className="card col" style={{ gap: 10, borderColor: "var(--gold)" }}>
-          <b><i className="ph ph-eye" style={{ color: "var(--gold)" }} /> مراجعة المنتجات قبل النشر</b>
-          <small>المنتجات دي مش ظاهرة للعملاء. افتح أي منتج بـ "تعديل" علشان تراجع الاسم والسعر والصور، وبعدين انشره. أو علّم على كذا منتج وانشرهم مرة واحدة.</small>
+          {f === "pending" ? <b><i className="ph ph-eye" style={{ color: "var(--gold)" }} /> مراجعة المنتجات قبل النشر</b> : <b><i className="ph ph-check-square" style={{ color: "var(--gold)" }} /> إجراءات على المنتجات المتعلّمة</b>}
+          {f === "pending" && <small>المنتجات دي مش ظاهرة للعملاء. افتح أي منتج بـ "تعديل" علشان تراجع الاسم والسعر والصور، وبعدين انشره. أو علّم على كذا منتج وانشرهم مرة واحدة.</small>}
           <div className="row wrap">
             <button className="btn o sm2" onClick={() => setSel(list.map((p) => p.id))}>علّم الكل ({list.length})</button>
             <button className="btn o sm2" onClick={() => setSel([])}>شيل العلامات</button>
             <span className="sp"><b>{sel.length}</b> متعلّم</span>
             <button className="btn sm2" disabled={!sel.length} onClick={() => bulk(sel, "active")}><i className="ph ph-check" />نشر المتعلّم</button>
             <button className="btn r sm2" disabled={!sel.length} onClick={() => bulk(sel, "delete")}><i className="ph ph-trash" />حذف المتعلّم</button>
+            <button className="btn o sm2" disabled={!sel.length} onClick={() => bulk(sel, "hidden")}><i className="ph ph-eye-slash" />إخفاء المتعلّم</button>
+            <Link className={`btn gd sm2${sel.length ? "" : " dis"}`} href={sel.length ? `/admin/enhance?ids=${sel.slice(0, 300).join(",")}` : "#"} aria-disabled={!sel.length} onClick={(e) => { if (!sel.length) e.preventDefault(); }}><i className="ph ph-magic-wand" />حسّن المتعلّم ({sel.length})</Link>
           </div>
           {rmsg && <span className="ok">{rmsg}</span>}
         </div>
       )}
       <div className="row wrap">
-        {[["all", "الكل"], ["active", "منشور"], ["pending", `مراجعة${pendingN ? ` (${pendingN})` : ""}`], ["hidden", "مخفي"], ["low", `مخزون قليل${lowN ? ` (${lowN})` : ""}`]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => { setF(k); setSel([]); }}>{t}</button>)}
+        {[["all", "الكل"], ["active", "منشور"], ["pending", `مراجعة${pendingN ? ` (${pendingN})` : ""}`], ["hidden", "مخفي"], ["low", `مخزون قليل${lowN ? ` (${lowN})` : ""}`], ["noimg", "صورها ماتحسنتش"], ["notext", "وصفها ماتحسنش"]].map(([k, t]) => <button key={k} className={`chip ${f === k ? "on" : ""}`} onClick={() => { setF(k); setSel([]); }}>{t}</button>)}
         <span style={{ width: 1, alignSelf: "stretch", background: "var(--bd)" }} />
         <button className={`chip ${rf === "todo" ? "on" : ""}`} onClick={() => setRf(rf === "todo" ? "" : "todo")}><i className="ph ph-circle-dashed" />لسه ماتراجعش ({(data?.length ?? 0) - revDone})</button>
         <button className={`chip ${rf === "done" ? "on" : ""}`} onClick={() => setRf(rf === "done" ? "" : "done")}><i className="ph ph-check-circle" />تم مراجعته ({revDone})</button>

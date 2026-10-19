@@ -8,6 +8,32 @@
 
 export type Redraw = { dataUrl: string; by: string };
 
+/** Cloudflare Workers AI — FLUX.2 [klein] image editing. FREE daily allowance (10,000 neurons/day) on any Cloudflare account.
+ *  Env: CF_ACCOUNT_ID + CF_API_TOKEN (token with "Workers AI" permission). Input must be under 512×512 → we fetch a 500px copy. */
+async function cloudflare(b64: string, prompt: string, fails: string[], small?: string) {
+  const acc = process.env.CF_ACCOUNT_ID, key = process.env.CF_API_TOKEN;
+  if (!acc || !key) return null;
+  const model = process.env.CF_IMAGE_MODEL || "@cf/black-forest-labs/flux-2-klein-4b";
+  try {
+    let img: Blob;
+    if (small) { const r = await fetch(small); if (!r.ok) throw new Error(`صورة ${r.status}`); img = await r.blob(); }
+    else img = new Blob([Buffer.from(b64, "base64")], { type: "image/jpeg" });
+    const form = new FormData();
+    form.append("prompt", prompt.slice(0, 2000));
+    form.append("input_image_0", img, "product.jpg");
+    form.append("width", "1024"); form.append("height", "1024");
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/ai/run/${model}`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form });
+    const ct = r.headers.get("content-type") || "";
+    if (!r.ok) { const j = await r.json().catch(() => ({})); fails.push(`Cloudflare: ${String(j?.errors?.[0]?.message || r.status).slice(0, 90)}`); return null; }
+    if (ct.startsWith("image/")) return { dataUrl: `data:${ct};base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}`, by: "Cloudflare (مجاني)" };
+    const j = await r.json().catch(() => ({}));
+    const out = j?.result?.image || j?.image;
+    if (out) return { dataUrl: String(out).startsWith("data:") ? out : `data:image/png;base64,${out}`, by: "Cloudflare (مجاني)" };
+    fails.push("Cloudflare: no image");
+  } catch (e) { fails.push(`Cloudflare: ${String((e as Error).message).slice(0, 60)}`); }
+  return null;
+}
+
 async function meta(b64: string, prompt: string, fails: string[]) {
   const key = process.env.META_API_KEY || process.env.LLAMA_API_KEY; if (!key) return null;
   try {
@@ -80,12 +106,15 @@ async function xai(b64: string, prompt: string, fails: string[]) {
 }
 
 /** Returns the edited picture from the first provider that manages it, or throws with every provider's reason. */
-export async function redraw(b64: string, prompt: string): Promise<Redraw> {
+export async function redraw(b64: string, prompt: string, small?: string): Promise<Redraw> {
   const fails: string[] = [];
+  // free first (Cloudflare), then the paid / quota ones
+  const cf = await cloudflare(b64, prompt, fails, small);
+  if (cf) return cf;
   for (const run of [meta, gemini, openrouter, xai]) {
     const res = await run(b64, prompt, fails);
     if (res) return res;
   }
-  const none = !process.env.META_API_KEY && !process.env.LLAMA_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.XAI_API_KEY;
-  throw Object.assign(new Error(none ? "مفيش مفتاح بيعمل صور (Meta / Gemini / OpenRouter / Grok)" : `كل مفاتيح الصور رفضت: ${fails.join(" | ")}`), { status: 400 });
+  const none = !(process.env.CF_ACCOUNT_ID && process.env.CF_API_TOKEN) && !process.env.META_API_KEY && !process.env.LLAMA_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.XAI_API_KEY;
+  throw Object.assign(new Error(none ? "مفيش مفتاح بيعمل صور (Cloudflare / Meta / Gemini / OpenRouter / Grok)" : `كل مفاتيح الصور رفضت: ${fails.join(" | ")}`), { status: 400 });
 }

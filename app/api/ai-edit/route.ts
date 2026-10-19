@@ -91,7 +91,7 @@ async function upload(file: string) {
 async function geminiEdit(url: string, instr: string) {
   const img = await fetch(sized(url, 1024).replace("f_auto", "f_jpg"));
   const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
-  const r = await redraw(b64, `Edit this product photo exactly as requested, keep everything else (especially the product itself and its details) unchanged, keep it a clean professional e-commerce photo, high resolution. Request: ${instr}`);
+  const r = await redraw(b64, `Edit this product photo exactly as requested, keep everything else (especially the product itself and its details) unchanged, keep it a clean professional e-commerce photo, high resolution. Request: ${instr}`, sized(url, 500).replace("w_500,c_limit", "w_500,h_500,c_limit").replace("f_auto", "f_jpg"));
   return { image: await upload(r.dataUrl), by: r.by };
 }
 
