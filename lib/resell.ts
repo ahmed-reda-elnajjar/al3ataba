@@ -71,7 +71,10 @@ export function wholesaleMin(p: Product) {
   return step ?? ((p.moq || 1) >= 2 ? p.moq : 0);
 }
 export const minQty = (p: Product) => (resellMode(p) === "wholesale" ? Math.max(1, wholesaleMin(p) || p.moq || 1) : 1);
-export const maxQty = (p: Product) => (resellMode(p) === "retail" && wholesaleMin(p) > 1 ? wholesaleMin(p) - 1 : 10000);
+export const maxQty = (p: Product) => {
+  const m = resellMode(p) === "retail" && wholesaleMin(p) > 1 ? wholesaleMin(p) - 1 : 10000;
+  return typeof p.stock === "number" ? Math.max(0, Math.min(m, p.stock)) : m; // can't sell more than the supplier has
+};
 export const modeLabel = (p: Product) => ({ both: "قطاعي وجملة", retail: "قطاعي بس", wholesale: "جملة بس" })[resellMode(p)];
 export const isRetail = (p: Product, qty: number) => { const w = wholesaleMin(p); return w > 1 && qty < w; };
 

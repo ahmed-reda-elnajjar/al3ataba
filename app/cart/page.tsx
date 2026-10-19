@@ -36,7 +36,7 @@ export default function Cart() {
                     {i.promoMin && !i.promoOn && <small style={{ color: "#c0392b" }}>ضيف {i.promoMin - (offerTotals(items)[i.promoId!] || 0)} قطعة كمان من نفس العرض علشان الخصم يتطبق</small>}
                     <small>{fmt(i.price)} ج.م / {i.unit}</small>
                     {i.fixed ? <small>الكمية: {i.qty} {i.unit} (حسب عرض السعر)</small> : (
-                      <div className="qty" style={{ alignSelf: "flex-start" }}><button style={{ height: 34, width: 34 }} aria-label="أكثر" onClick={() => change(i.id, nextQty(i.tiers, i.qty, i.moq))}><i className="ph ph-plus" /></button><b style={{ minWidth: 44, textAlign: "center" }}>{i.qty}</b><button style={{ height: 34, width: 34 }} aria-label="أقل" onClick={() => change(i.id, prevQty(i.tiers, i.qty, i.moq))}><i className="ph ph-minus" /></button></div>
+                      <div className="qty" style={{ alignSelf: "flex-start" }}><button style={{ height: 34, width: 34 }} aria-label="أكثر" disabled={typeof i.stock === "number" && nextQty(i.tiers, i.qty, i.moq) > i.stock} title={typeof i.stock === "number" ? `المتاح ${i.stock}` : undefined} onClick={() => change(i.id, nextQty(i.tiers, i.qty, i.moq))}><i className="ph ph-plus" /></button><b style={{ minWidth: 44, textAlign: "center" }}>{i.qty}</b><button style={{ height: 34, width: 34 }} aria-label="أقل" onClick={() => change(i.id, prevQty(i.tiers, i.qty, i.moq))}><i className="ph ph-minus" /></button></div>
                     )}
                   </div>
                   <div className="col g8" style={{ alignItems: "flex-end" }}>

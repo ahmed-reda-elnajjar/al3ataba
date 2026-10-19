@@ -51,7 +51,7 @@ export default function ProductPage() {
   const addToCart = () => {
     if (tooMany) return;
     track("cart", p);
-    add({ id: cartId, productId: p.id, name: color ? `${p.name} (${color})` : p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: q, price: priceFor(p.tiers, q), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod, ...cartPromoFields(p) });
+    add({ stock, id: cartId, productId: p.id, name: color ? `${p.name} (${color})` : p.name, merchantId: p.merchantId, merchant: p.merchantName, qty: q, price: priceFor(p.tiers, q), image: p.images?.[0], unit: p.unit, moq: p.moq, tiers: p.tiers, cod: p.cod, ...cartPromoFields(p) });
     router.push("/cart");
   };
   const tiers = sortTiers(p.tiers);

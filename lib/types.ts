@@ -36,7 +36,7 @@ export type Merchant = {
 };
 export type CartItem = {
   id: string; productId: string; name: string; merchantId: string; merchant: string;
-  qty: number; price: number; promo?: string; promoId?: string; promoMin?: number; promoTiers?: Tier[]; promoOn?: boolean; image?: string; unit: string; moq: number; fixed?: boolean; tiers?: Tier[]; cod?: boolean;
+  qty: number; price: number; promo?: string; promoId?: string; promoMin?: number; promoTiers?: Tier[]; promoOn?: boolean; image?: string; unit: string; moq: number; fixed?: boolean; tiers?: Tier[]; cod?: boolean; stock?: number | null;
 };
 export type Order = {
   id: string; orderNo: string; userId: string; buyerName: string; phone: string;
