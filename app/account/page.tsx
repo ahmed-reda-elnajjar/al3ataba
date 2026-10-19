@@ -58,7 +58,6 @@ function Body() {
           </div>
           <div className="menu">
             <M k="orders" ic="ph-receipt" t="طلباتي" n={data?.orders.length} />
-            <M k="rfq" ic="ph-clipboard-text" t="طلبات عروض الأسعار" n={data?.rfqs.length} />
             <M k="favs" ic="ph-heart" t="المفضلة" n={favs.ids.length} />
             {isAdmin && <Link href="/admin"><span className="mi"><i className="ph ph-gear" /></span><span className="sp">لوحة الإدارة</span><i className="ph ph-caret-left chev" /></Link>}
             {merchant ? <Link href="/merchant"><span className="mi"><i className="ph ph-storefront" /></span><span className="sp">لوحة التاجر</span><i className="ph ph-caret-left chev" /></Link>

@@ -15,7 +15,6 @@ const links = [
   { href: "/admin/import-site", t: "استيراد من موقع تاجر", ic: "ph-globe" },
   { href: "/admin/merchants", t: "التجار", ic: "ph-storefront" },
   { href: "/admin/orders", t: "الطلبات", ic: "ph-receipt" },
-  { href: "/admin/rfqs", t: "طلبات عروض الأسعار", ic: "ph-clipboard-text" },
   { href: "/admin/settings", t: "الإعدادات", ic: "ph-gear" },
 ];
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

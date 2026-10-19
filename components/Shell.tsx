@@ -64,7 +64,6 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
             <L href="/search" ic="ph-package" t="كل المنتجات" />
             <L href="/offers" ic="ph-tag" t="العروض" />
             <L href="/suppliers" ic="ph-storefront" t="التجار والمصانع" />
-            <L href="/rfq" ic="ph-clipboard-text" t="طلب منتج / عرض سعر" />
             <L href="/resell" ic="ph-hand-coins" t="البيع بالعمولة" />
             <L href="/cart" ic="ph-shopping-cart" t="السلة" />
             <L href={loggedIn ? "/account" : "/login"} ic="ph-user" t={loggedIn ? "حسابي" : "تسجيل الدخول"} />
@@ -151,7 +150,6 @@ export function Header() {
         <nav className="nav hm">
           {panel ? <Link href={panel.href} className="nl"><i className={`ph ${panel.ic}`} />{panel.t}</Link> : <Link href="/sell" className="nl"><i className="ph ph-storefront" />بيع معانا</Link>}
           <Link href="/resell" className="nl"><i className="ph ph-hand-coins" />البيع بالعمولة</Link>
-          <Link href="/rfq" className="nl"><i className="ph ph-clipboard-text" />طلب منتج</Link>
           <Link href="/cart" className="nl"><i className="ph ph-shopping-cart" />{count > 0 && <span className="cnt">{count}</span>}السلة</Link>
           <Link href={loggedIn ? "/account" : "/login"} className="nl"><i className="ph ph-user" />{loggedIn ? "حسابي" : "دخول"}</Link>
         </nav>
@@ -159,7 +157,7 @@ export function Header() {
       <SearchBox className="srch sm" style={{ marginTop: 10 }} />
       {!bare && <AddrLine />}
       <nav className="hdr-links hm">
-        <Link href="/categories">الأقسام</Link><Link href="/search">كل المنتجات</Link><Link href="/offers">العروض</Link><Link href="/suppliers">التجار والمصانع</Link><Link href="/rfq">طلب عرض سعر</Link><Link href="/help">المساعدة</Link>
+        <Link href="/categories">الأقسام</Link><Link href="/search">كل المنتجات</Link><Link href="/offers">العروض</Link><Link href="/suppliers">التجار والمصانع</Link><Link href="/help">المساعدة</Link>
       </nav>
     </header>
   );
@@ -174,7 +172,7 @@ export function Footer() {
           <span>من كل أسواق مصر .. في مكان واحد. منصة تجارة جملة بين البائع والمشتري.</span>
           <b style={{ color: "var(--gold2)", fontFamily: "Alexandria" }}>مش مجرد متجر .. ده أسواق مصر</b>
         </div>
-        <div className="col g4"><b>العتبة</b><Link href="/categories">الأقسام</Link><Link href="/suppliers">التجار</Link><Link href="/sell">سجّل كتاجر</Link><Link href="/resell">البيع بالعمولة</Link><Link href="/rfq">اطلب عرض سعر</Link></div>
+        <div className="col g4"><b>العتبة</b><Link href="/categories">الأقسام</Link><Link href="/suppliers">التجار</Link><Link href="/sell">سجّل كتاجر</Link><Link href="/resell">البيع بالعمولة</Link></div>
         <div className="col g4"><b>مساعدة</b><Link href="/help">مركز المساعدة</Link><Link href="/legal/returns">المرتجعات</Link><Link href="/legal/terms">الشروط</Link><Link href="/legal/privacy">الخصوصية</Link></div>
       </div>
       <Skyline />
@@ -196,7 +194,7 @@ export function BottomNav() {
     <nav className="bn sm">
       <Link href="/" className={p === "/" ? "on" : ""}><i className="ph ph-house" />الرئيسية</Link>
       <Link href="/categories" className={on("/categories") || on("/search")}><i className="ph ph-squares-four" />الأقسام</Link>
-      <Link href="/rfq" className={on("/rfq")}><i className="ph ph-clipboard-text" />طلب منتج</Link>
+      <Link href="/offers" className={on("/offers")}><i className="ph ph-tag" />العروض</Link>
       <Link href="/cart" className={on("/cart") || on("/checkout")}><i className="ph ph-shopping-cart" />{count > 0 && <span className="cnt">{count}</span>}السلة</Link>
       <Link href={loggedIn ? "/account" : "/login"} className={on("/account") || on("/login")}><i className="ph ph-dots-three-circle" />المزيد</Link>
     </nav>

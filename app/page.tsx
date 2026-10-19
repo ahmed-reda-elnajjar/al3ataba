@@ -1,13 +1,13 @@
 "use client";
 import { topCats } from "@/lib/cats";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { st } from "@/lib/style";
 import { useAsync } from "@/lib/hooks";
 import { useApp } from "@/lib/providers";
-import { listApprovedMerchants, listCategories, newArrivalsMixed } from "@/lib/store";
+import { listApprovedMerchants, listCategories, newArrivalsMixed, pageActiveProducts, type Cursor } from "@/lib/store";
+import type { Product } from "@/lib/types";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
-import { Skyline } from "@/components/Brand";
 import { Recommended } from "@/components/Recommend";
 import { HeroSlider, usePersonalCats } from "@/components/Promos";
 import { Rail } from "@/components/Rail";
@@ -21,6 +21,15 @@ export default function Home() {
     const products = await newArrivalsMixed(10, cats.map((c) => c.id));
     return { products, cats, merchants };
   });
+  // "more products": next pages of the newest products (from the cached catalogue — no extra Firebase reads)
+  const [more, setMore] = useState<{ items: Product[]; cursor: Cursor; has: boolean; busy: boolean }>({ items: [], cursor: null, has: true, busy: false });
+  const loadMore = async () => {
+    setMore((m) => ({ ...m, busy: true }));
+    try {
+      const r = await pageActiveProducts(20, { after: more.cursor });
+      setMore((m) => { const seen = new Set(m.items.map((x) => x.id)); return { items: [...m.items, ...r.items.filter((x) => !seen.has(x.id))], cursor: r.cursor, has: r.more && r.items.length > 0, busy: false }; });
+    } catch { setMore((m) => ({ ...m, busy: false })); }
+  };
   const verified = new Set((data?.merchants ?? []).filter((m) => m.verified).map((m) => m.id));
   const products = data?.products ?? [];
   // main categories first, then sub-categories ordered for this shopper (offers → what they browse/buy most)
@@ -38,7 +47,7 @@ export default function Home() {
       {cats.length > 0 && (
         <section className="sec">
           <div className="sec-h"><h2>أقسام رئيسية</h2><Link href="/categories">عرض الكل</Link></div>
-          <Rail>
+          <Rail auto={2800}>
             {cats.map((c) => (
               <Link key={c.id} href={`/c/${c.id}`} className="tile short">
                 <Img src={c.image} ic={c.icon} ratio={4 / 3} w={300} />
@@ -56,10 +65,13 @@ export default function Home() {
       <section className="sec">
         <div className="sec-h"><h2>وصل حديثاً</h2>{products.length > 0 && <Link href="/search">عرض الكل</Link>}</div>
         {loading ? <Loading /> : products.length ? (
-          <div className="grid" style={st("--m:2;--d:5")}>{products.slice(0, 10).map((p) => <ProductCard key={p.id} p={p} verified={verified.has(p.merchantId)} />)}</div>
+          <>
+            <div className="grid" style={st("--m:2;--d:5")}>{[...products.slice(0, 10), ...more.items.filter((x) => !products.slice(0, 10).some((p) => p.id === x.id))].map((p) => <ProductCard key={p.id} p={p} verified={verified.has(p.merchantId)} />)}</div>
+            {more.has && <div className="c mt2"><button className="btn o" disabled={more.busy} onClick={loadMore}>{more.busy ? "جاري التحميل…" : <><i className="ph ph-caret-down" />منتجات أكتر</>}</button></div>}
+          </>
         ) : (
           <Empty icon="ph-package" title="لسه مفيش منتجات منشورة" sub="المنتجات هتظهر هنا أول ما تتضاف.">
-            {isAdmin ? <Link href="/admin/products/new" className="btn">أضف أول منتج</Link> : <Link href="/rfq" className="btn">اطلب منتج</Link>}
+            {isAdmin ? <Link href="/admin/products/new" className="btn">أضف أول منتج</Link> : null}
           </Empty>
         )}
       </section>
@@ -79,17 +91,6 @@ export default function Home() {
         </section>
       )}
 
-      {/* RFQ banner */}
-      <section className="dash" style={{ marginBottom: 28 }}>
-        <Skyline className="sky" style={{ position: "absolute", bottom: 0, left: 0, width: "55%", opacity: 0.18, color: "var(--gold2)" }} />
-        <div className="row wrap" style={{ position: "relative" }}>
-          <div className="sp" style={{ minWidth: 220 }}>
-            <h2>مش لاقي اللي بتدور عليه؟</h2>
-            <small>اطلب المنتج بالكمية اللي محتاجها والتجار يبعتولك أسعارهم.</small>
-          </div>
-          <Link href="/rfq" className="btn gd">اطلب منتج</Link>
-        </div>
-      </section>
     </div>
   );
 }

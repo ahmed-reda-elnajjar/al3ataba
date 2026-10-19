@@ -127,7 +127,7 @@ function Results() {
           {loading ? <Loading rows={3} /> : list.length ? (
             <><div className="grid" style={st("--m:2;--d:4")}>{list.map((p) => <ProductCard key={p.id} p={p} verified={data?.verified.has(p.merchantId)} />)}</div>{more && !q && <div className="c mt2"><button className="btn o" disabled={busyMore} onClick={loadMore}>{busyMore ? "جاري التحميل…" : "عرض المزيد"}</button></div>}</>
           ) : (
-            <Empty icon="ph-magnifying-glass" title="مفيش نتايج مطابقة" sub="جرّب كلمة تانية أو شيل بعض الفلاتر، أو اطلب المنتج والتجار يدوروا لك."><Link href="/rfq" className="btn">اطلب منتج</Link></Empty>
+            <Empty icon="ph-magnifying-glass" title="مفيش نتايج مطابقة" sub="جرّب كلمة تانية أو شيل بعض الفلاتر." />
           )}
         </div>
       </div>

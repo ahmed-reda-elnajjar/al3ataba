@@ -79,7 +79,7 @@ export function SearchBox({ className, style }: { className: string; style?: Rea
                   <span className="sp nm1">{p.name}</span><b className="price" style={{ fontSize: 13 }}>{rangeText(p)} ج.م</b>
                 </Link>
               ); })}
-              {!res.products.length && !res.cats.length && !res.words.length && <div className="sg mu">مفيش اقتراحات، اضغط بحث أو <Link href="/rfq" style={{ color: "var(--pm)", textDecoration: "underline" }}>اطلب المنتج</Link></div>}
+              {!res.products.length && !res.cats.length && !res.words.length && <div className="sg mu">مفيش اقتراحات، اضغط بحث</div>}
             </>
           )}
         </div>

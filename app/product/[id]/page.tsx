@@ -100,7 +100,6 @@ export default function ProductPage() {
             <div className="sp"><small>الإجمالي</small><div className="price" style={{ fontSize: 24 }}>{fmt(q * price)} ج.م</div></div>
           </div>
           <button className="btn blk" onClick={addToCart}><i className="ph ph-shopping-cart" />{inCart ? "تحديث السلة" : "أضف إلى السلة"}</button>
-          <Link href={`/rfq?product=${encodeURIComponent(p.name)}&cat=${p.categoryId}`} className="btn o blk">اطلب عرض سعر لكمية أكبر</Link>
           <b style={{ marginTop: 6 }}>معلومات التاجر</b>
           <Link href={`/store/${p.merchantId}`} className="card row">
             <Img ic="ph-storefront" ratio={1} style={{ width: 56, borderRadius: 12 }} />

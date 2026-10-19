@@ -37,7 +37,7 @@ export default function Merchant() {
           <div><b>{data.products}</b><small>المنتجات</small></div>
         </div>
       </div>
-      <div className="row wrap"><Link className="btn" href="/merchant/products/new"><i className="ph ph-plus" />إضافة منتج جديد</Link><Link className="btn o" href="/merchant/rfqs">طلبات عروض الأسعار</Link></div>
+      <div className="row wrap"><Link className="btn" href="/merchant/products/new"><i className="ph ph-plus" />إضافة منتج جديد</Link></div>
       <div className="sec-h"><h2>أحدث الطلبات</h2><Link href="/merchant/orders">عرض الكل</Link></div>
       {!data.orders.length ? <Empty icon="ph-receipt" title="لسه مفيش طلبات" /> : (
         <div className="menu">

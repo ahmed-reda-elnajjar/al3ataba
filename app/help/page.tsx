@@ -28,7 +28,6 @@ export default function Help() {
       <div className="card row wrap mt2">
         <div className="sp"><b>لسه محتاج مساعدة؟</b><p className="mu">فريق الدعم جاهز يرد عليك.</p></div>
         {settings.whatsapp && <a className="btn" href={waLink(settings.whatsapp)} target="_blank" rel="noreferrer"><i className="ph ph-whatsapp-logo" />واتساب</a>}
-        <Link href="/rfq" className="btn o">اطلب عرض سعر</Link>
       </div>
     </div>
   );
