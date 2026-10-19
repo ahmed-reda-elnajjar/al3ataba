@@ -61,9 +61,21 @@ function Orders({ orders, act }: { orders: ROrder[]; act: (b: object) => Promise
     if ((s === "cancelled" || s === "returned") && !confirm(`تأكيد: الطلب هيتعلّم "${RSTATUS[s]}"؟`)) return;
     setBusy(o.id); await act({ action: "order", id: o.id, status: s }); setBusy("");
   };
+  /** CSV for the shipping company's bulk upload (opens in Excel with Arabic). */
+  const exportCsv = () => {
+    const rows = list.length ? list : orders;
+    const head = ["رقم الطلب", "اسم المستلم", "التليفون", "تليفون 2", "المحافظة", "المنطقة", "الشارع", "رقم العمارة", "الدور", "الشقة", "علامة مميزة", "الرقم البريدي", "العنوان كامل", "مبلغ التحصيل", "عدد القطع", "وصف الشحنة", "السماح بفتح الشحنة", "ملاحظات", "البائع"];
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
+    const lines = rows.map((o) => { const c = o.customer; return [o.id.slice(0, 8), c.name, c.phone, c.phone2 || "", c.governorate, c.area || "", c.street || "", c.building || "", c.floor || "", c.apartment || "", c.landmark || "", c.postal || "", c.address, o.total, o.items.reduce((a, i) => a + i.qty, 0), o.items.map((i) => `${i.name} × ${i.qty}`).join(" + "), c.allowOpen === false ? "لا" : "نعم", c.notes || "", o.resellerName].map(esc).join(","); });
+    const blob = new Blob(["\ufeff" + [head.map(esc).join(","), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `shipping-${f || "all"}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  };
   return (
     <>
-      <input className="in" placeholder="بحث بالاسم أو التليفون أو البائع أو رقم الطلب" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="row wrap" style={{ gap: 8 }}>
+        <input className="in sp" style={{ minWidth: 220 }} placeholder="بحث بالاسم أو التليفون أو البائع أو رقم الطلب" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button className="btn o sm2" onClick={exportCsv} disabled={!orders.length}><i className="ph ph-file-csv" />تصدير لشركة الشحن ({list.length || orders.length})</button>
+      </div>
       <div className="scr">
         <button className={`chip${!f ? " on" : ""}`} onClick={() => setF("")}>الكل ({orders.length})</button>
         {(Object.keys(RSTATUS) as RStatus[]).map((s) => <button key={s} className={`chip${f === s ? " on" : ""}`} onClick={() => setF(s)}>{RSTATUS[s]} ({orders.filter((o) => o.status === s).length})</button>)}
@@ -80,7 +92,7 @@ function Orders({ orders, act }: { orders: ROrder[]; act: (b: object) => Promise
             <a href={`https://wa.me/2${o.customer.phone}`} target="_blank" rel="noreferrer" className="btn o sm2"><i className="ph ph-whatsapp-logo" />واتساب</a>
             {o.customer.phone2 && <a href={`tel:${o.customer.phone2}`} className="btn o sm2"><i className="ph ph-phone" />{o.customer.phone2}</a>}
           </div>
-          <small>{o.customer.address}{o.customer.notes ? ` — ملاحظات: ${o.customer.notes}` : ""}</small>
+          <small>{o.customer.address}{o.customer.postal ? ` · ر.ب ${o.customer.postal}` : ""} · {o.customer.allowOpen === false ? "ممنوع فتح الشحنة" : "مسموح بفتح الشحنة"}{o.customer.notes ? ` — ملاحظات: ${o.customer.notes}` : ""}</small>
           <table className="tbl"><tbody>{o.items.map((i) => <tr key={i.productId}><td>{i.name}</td><td>{i.qty} {i.unit}{i.retail ? " (قطاعي)" : ""}</td><td>{ji(i.base)} + {ji(i.commission)}</td><td><b>{ji(i.price * i.qty)}</b></td></tr>)}</tbody></table>
           <div className="row wrap" style={{ gap: 14, fontSize: 13.5 }}>
             <span>يتحصّل من العميل: <b>{ji(o.total)}</b> (منها شحن {ji(o.shipping)})</span>

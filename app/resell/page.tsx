@@ -23,7 +23,7 @@ import type { Category, Product, Promo } from "@/lib/types";
 
 type Line = { productId: string; qty: number; commission: number | null }; // null = suggested commission
 type Draft = { lines: Line[]; customer: RCustomer };
-const EMPTY_CUSTOMER: RCustomer = { name: "", phone: "", phone2: "", governorate: "", address: "", notes: "" };
+const EMPTY_CUSTOMER: RCustomer = { name: "", phone: "", phone2: "", governorate: "", area: "", street: "", building: "", floor: "", apartment: "", landmark: "", postal: "", address: "", notes: "", allowOpen: true };
 const DRAFT = "al3ataba-resell-draft";
 const loadDraft = (): Draft => {
   try { const d = JSON.parse(localStorage.getItem(DRAFT) || ""); if (Array.isArray(d.lines) && d.customer) return d; } catch { /* empty */ }
@@ -209,7 +209,10 @@ function OrderForm({ draft, setDraft, byId, cats, rs, promos, loading, user, onD
     if (!PHONE_RE.test(normPhone(cu.phone))) return setErr("رقم المستلم لازم يكون 11 رقم يبدأ بـ 01");
     if (cu.phone2 && !PHONE_RE.test(normPhone(cu.phone2))) return setErr("الرقم التاني مش صحيح");
     if (!cu.governorate) return setErr("اختار المحافظة");
-    if (cu.address.trim().length < 8) return setErr("اكتب العنوان بالتفصيل (المنطقة، الشارع، رقم العمارة…)");
+    if ((cu.area || "").trim().length < 2) return setErr("اكتب المنطقة / المدينة");
+    if ((cu.street || "").trim().length < 2) return setErr("اكتب اسم الشارع");
+    if (!(cu.building || "").trim()) return setErr("اكتب رقم العمارة");
+    if (cu.postal && cu.postal.replace(/\D/g, "").length !== 5) return setErr("الرقم البريدي لازم يكون 5 أرقام (أو سيبه فاضي)");
     setBusy(true);
     try {
       const j = await api<{ total: number; commissionTotal: number }>(user, "/api/resell/order", { customer: cu, items: rows.map((x) => ({ productId: x.p.id, qty: x.l.qty, commission: x.l.commission })) });
@@ -255,7 +258,18 @@ function OrderForm({ draft, setDraft, byId, cats, rs, promos, loading, user, onD
           <div className="fld"><label>تليفون تاني (اختياري)</label><input className="in" inputMode="tel" value={cu.phone2} onChange={setC("phone2")} /></div>
         </div>
         <div className="fld"><label>المحافظة</label><select className="in" value={cu.governorate} onChange={setC("governorate")}><option value="">اختار</option>{GOVERNORATES.map((g) => <option key={g}>{g}</option>)}</select></div>
-        <div className="fld"><label>العنوان بالتفصيل</label><textarea className="in" rows={2} value={cu.address} onChange={setC("address")} placeholder="المنطقة، الشارع، رقم العمارة، علامة مميزة" /></div>
+        <div className="grid" style={st("--m:2;--d:2")}>
+          <div className="fld"><label>المنطقة / المدينة</label><input className="in" value={cu.area || ""} onChange={setC("area")} placeholder="مثال: مدينة نصر" /></div>
+          <div className="fld"><label>الرقم البريدي (اختياري)</label><input className="in" inputMode="numeric" maxLength={5} value={cu.postal || ""} onChange={setC("postal")} placeholder="11765" /></div>
+        </div>
+        <div className="fld"><label>الشارع</label><input className="in" value={cu.street || ""} onChange={setC("street")} placeholder="مثال: عباس العقاد" /></div>
+        <div className="grid" style={st("--m:3;--d:3")}>
+          <div className="fld"><label>رقم العمارة</label><input className="in" value={cu.building || ""} onChange={setC("building")} /></div>
+          <div className="fld"><label>الدور</label><input className="in" value={cu.floor || ""} onChange={setC("floor")} /></div>
+          <div className="fld"><label>الشقة</label><input className="in" value={cu.apartment || ""} onChange={setC("apartment")} /></div>
+        </div>
+        <div className="fld"><label>علامة مميزة (اختياري)</label><input className="in" value={cu.landmark || ""} onChange={setC("landmark")} placeholder="مثال: جنب صيدلية …" /></div>
+        <label className="chk"><input type="checkbox" checked={cu.allowOpen !== false} onChange={(e) => setDraft((d) => ({ ...d, customer: { ...d.customer, allowOpen: e.target.checked } }))} />يسمح للعميل يفتح الشحنة ويشوفها قبل ما يستلم</label>
         <div className="fld"><label>ملاحظات (اختياري)</label><input className="in" value={cu.notes} onChange={setC("notes")} /></div>
         <div className="col" style={{ gap: 4, fontSize: 14, borderTop: "1px solid var(--bd)", paddingTop: 10 }}>
           <div className="row"><span className="sp">المنتجات</span><b>{ji(subtotal)}</b></div>

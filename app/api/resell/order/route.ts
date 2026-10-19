@@ -3,7 +3,7 @@ import { userFromToken } from "@/lib/serverAuth";
 import { addDocSA, getDocSA, listSA } from "@/lib/sa";
 import { registerCats } from "@/lib/cats";
 import { GOVERNORATES } from "@/lib/config";
-import { PHONE_RE, baseUnit, canResell, defaultCommission, isRetail, maxQty, minQty, money, normPhone, resellSettings, shipFor, type RCustomer, type RItem, type Reseller } from "@/lib/resell";
+import { PHONE_RE, fullAddress, baseUnit, canResell, defaultCommission, isRetail, maxQty, minQty, money, normPhone, resellSettings, shipFor, type RCustomer, type RItem, type Reseller } from "@/lib/resell";
 import type { Category, Product, Promo, Settings } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -21,12 +21,17 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const c = body.customer || {};
-    const customer: RCustomer = { name: txt(c.name, 80), phone: normPhone(c.phone), phone2: normPhone(c.phone2 || ""), governorate: txt(c.governorate, 40), address: txt(c.address, 300), notes: txt(c.notes, 300) };
+    const parts = { area: txt(c.area, 80), street: txt(c.street, 120), building: txt(c.building, 20), floor: txt(c.floor, 10), apartment: txt(c.apartment, 10), landmark: txt(c.landmark, 120) };
+    const postal = String(c.postal || "").replace(/[٠-٩]/g, (d: string) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/\D/g, "").slice(0, 5);
+    const customer: RCustomer = { name: txt(c.name, 80), phone: normPhone(c.phone), phone2: normPhone(c.phone2 || ""), governorate: txt(c.governorate, 40), ...parts, postal, address: fullAddress(parts), notes: txt(c.notes, 300), allowOpen: c.allowOpen !== false };
     if (customer.name.length < 3) return bad("اكتب اسم المستلم");
     if (!PHONE_RE.test(customer.phone)) return bad("رقم تليفون المستلم مش صحيح (لازم 11 رقم يبدأ بـ 01)");
     if (customer.phone2 && !PHONE_RE.test(customer.phone2)) return bad("الرقم التاني مش صحيح");
     if (!GOVERNORATES.includes(customer.governorate)) return bad("اختار المحافظة");
-    if (customer.address.length < 8) return bad("اكتب العنوان بالتفصيل");
+    if (parts.area.length < 2) return bad("اكتب المنطقة / المدينة");
+    if (parts.street.length < 2) return bad("اكتب اسم الشارع");
+    if (!parts.building) return bad("اكتب رقم العمارة");
+    if (postal && postal.length !== 5) return bad("الرقم البريدي لازم يكون 5 أرقام");
 
     const raw: { productId: string; qty: number; commission?: number | null }[] = Array.isArray(body.items) ? body.items : [];
     if (!raw.length || raw.length > 30) return bad("الطلب لازم يكون فيه من منتج لـ 30 منتج");

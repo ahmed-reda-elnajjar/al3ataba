@@ -33,7 +33,20 @@ export type Reseller = {
   payMethod: "vcash" | "instapay"; payNumber: string;
   status: "pending" | "approved" | "suspended"; createdAt?: { seconds: number };
 };
-export type RCustomer = { name: string; phone: string; phone2?: string; governorate: string; address: string; notes?: string };
+/** What a shipping company (Bosta, J&T, Aramex…) needs for a door-to-door COD delivery. `address` = all parts in one line. */
+export type RCustomer = {
+  name: string; phone: string; phone2?: string; governorate: string;
+  area?: string;      // المنطقة / المدينة / الحي
+  street?: string;    // الشارع
+  building?: string;  // رقم العمارة / المبنى
+  floor?: string; apartment?: string;
+  landmark?: string;  // علامة مميزة
+  postal?: string;    // الرقم البريدي (اختياري)
+  address: string; notes?: string;
+  allowOpen?: boolean; // يسمح للعميل يفتح الشحنة قبل الاستلام
+};
+export const fullAddress = (c: Pick<RCustomer, "area" | "street" | "building" | "floor" | "apartment" | "landmark">) =>
+  [c.area, c.street && `شارع ${c.street.replace(/^شارع\s*/, "")}`, c.building && `عمارة ${c.building}`, c.floor && `الدور ${c.floor}`, c.apartment && `شقة ${c.apartment}`, c.landmark && `بجوار ${c.landmark.replace(/^بجوار\s*/, "")}`].filter(Boolean).join("، ");
 export type RItem = { productId: string; name: string; image: string; unit: string; qty: number; retail: boolean; base: number; commission: number; price: number };
 export type RStatus = "new" | "confirmed" | "shipped" | "delivered" | "returned" | "cancelled";
 export type ROrder = {
