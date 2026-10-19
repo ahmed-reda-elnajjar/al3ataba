@@ -11,8 +11,13 @@ export type Redraw = { dataUrl: string; by: string };
 /** Cloudflare Workers AI — FLUX.2 [klein] image editing. FREE daily allowance (10,000 neurons/day) on any Cloudflare account.
  *  Env: CF_ACCOUNT_ID + CF_API_TOKEN (token with "Workers AI" permission). Input must be under 512×512 → we fetch a 500px copy. */
 async function cloudflare(b64: string, prompt: string, fails: string[], small?: string) {
-  const acc = process.env.CF_ACCOUNT_ID, key = process.env.CF_API_TOKEN;
-  if (!acc || !key) return null;
+  // tolerate pasted extras: a whole curl line / "Bearer …" for the token, a dashboard URL for the account id
+  const rawKey = process.env.CF_API_TOKEN || "", rawAcc = process.env.CF_ACCOUNT_ID || "";
+  const key = (rawKey.match(/cfut_[A-Za-z0-9_-]+/) || rawKey.replace(/^.*Bearer\s+/i, "").match(/[A-Za-z0-9_-]{30,}/) || [""])[0];
+  const acc = (rawAcc.match(/[a-f0-9]{32}/i) || [""])[0];
+  if (!rawAcc && !rawKey) return null;
+  if (!acc) { fails.push("Cloudflare: CF_ACCOUNT_ID مش مظبوط (لازم 32 حرف ورقم)"); return null; }
+  if (!key) { fails.push("Cloudflare: CF_API_TOKEN مش مظبوط"); return null; }
   const model = process.env.CF_IMAGE_MODEL || "@cf/black-forest-labs/flux-2-klein-4b";
   try {
     let img: Blob;
