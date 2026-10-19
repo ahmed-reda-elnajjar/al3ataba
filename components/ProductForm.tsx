@@ -1,4 +1,6 @@
 "use client";
+import { treeList } from "@/lib/cats";
+import type { Category } from "@/lib/types";
 import { touchCatalog } from "@/lib/catalogClient";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -34,7 +36,7 @@ export function ProductForm({ id, back }: { id?: string; back: string }) {
   return <Inner key={id ?? "new"} p={existing.data ?? null} cats={cats.data ?? []} back={back} user={user?.uid ?? ""} isAdmin={isAdmin} merchant={merchant} router={router} />;
 }
 
-type Cat = { id: string; name: string };
+type Cat = Category;
 function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product | null; cats: Cat[]; back: string; user: string; isAdmin: boolean; merchant: ReturnType<typeof useApp>["merchant"]; router: ReturnType<typeof useRouter> }) {
   const [name, setName] = useState(p?.name ?? "");
   const [description, setDescription] = useState(p?.description ?? "");
@@ -176,7 +178,7 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
       </div>
       <div className="fld"><label>اسم المنتج</label><input className="in" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: كوبايات زجاج 250 مل" /></div>
       <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 3 }}>
-        <div className="fld"><label>القسم</label><select className="in" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}><option value="">اختار…</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div className="fld"><label>القسم</label><select className="in" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}><option value="">اختار…</option>{treeList(cats).map((c) => <option key={c.id} value={c.id}>{c.depth ? `— ${c.name}` : c.name}</option>)}</select></div>
         <div className="fld"><label>وحدة البيع</label><select className="in" value={unit} onChange={(e) => setUnit(e.target.value)}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select></div>
         <div className="fld"><label>أقل كمية للطلب</label><input className="in" inputMode="numeric" value={moq} onChange={(e) => setMoq(e.target.value.replace(/\D/g, ""))} /></div>
       </div>

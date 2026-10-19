@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { childrenOf, productCats } from "@/lib/cats";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { SITE, firstImage, minPrice, restCategory, restCategoryRes, restProducts } from "@/lib/fsrest";
@@ -28,9 +29,13 @@ export default async function CategoryPage({ params }: Props) {
   // read from the cached catalogue (no Firebase reads per visit); fall back to direct reads only if it's unavailable
   const cat = await catalogOrNull();
   let c: Category | null = null, missing = false, products: Product[] = [];
+  let subs: Category[] = [], parent: Category | null = null;
   if (cat) {
     c = cat.categories.find((x) => x.id === id) || null; missing = !c;
-    products = cat.products.filter((p) => p.categoryId === id || !!p.extraCats?.includes(id)).slice(0, 120);
+    // a main category shows the products of all its sub-categories
+    products = cat.products.filter((p) => productCats(p, cat.categories).includes(id)).slice(0, 240);
+    subs = childrenOf(cat.categories, id);
+    parent = c?.parentId ? cat.categories.find((x) => x.id === c!.parentId) || null : null;
   } else {
     const [r, ps] = await Promise.all([restCategoryRes(id), restProducts({ cat: id, limit: 120 })]);
     c = r.c; missing = r.missing; products = ps;
@@ -47,7 +52,7 @@ export default async function CategoryPage({ params }: Props) {
   return (
     <div className="wc">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
-      <small><Link href="/">الرئيسية</Link> › <Link href="/categories">الأقسام</Link></small>
+      <small><Link href="/">الرئيسية</Link> › <Link href="/categories">الأقسام</Link>{parent && <> › <Link href={`/c/${parent.id}`}>{parent.name}</Link></>}</small>
       <div className="row wrap mt" style={{ alignItems: "flex-end", marginBottom: 14 }}>
         <div className="sp">
           <h1 style={{ fontSize: 24 }}>{c.name} بالجملة</h1>
@@ -55,6 +60,11 @@ export default async function CategoryPage({ params }: Props) {
         </div>
         <Link href={`/search?cat=${c.id}`} className="btn o sm2"><i className="ph ph-sliders-horizontal" />فلترة وترتيب</Link>
       </div>
+      {subs.length > 0 && (
+        <div className="scr" style={{ gap: 8, marginBottom: 14 }}>
+          {subs.map((s) => <Link key={s.id} href={`/c/${s.id}`} className="chip" style={{ minHeight: 34 }}>{s.name}</Link>)}
+        </div>
+      )}
       {list.length ? (
         <div className="grid" style={{ ["--m" as string]: 2, ["--d" as string]: 5 }}>{list.map((p) => <ProductCard key={p.id} p={p} />)}</div>
       ) : <p className="mu">لسه مفيش منتجات في القسم ده.</p>}

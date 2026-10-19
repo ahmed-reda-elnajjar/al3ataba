@@ -1,4 +1,5 @@
 "use client";
+import { treeList } from "@/lib/cats";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -81,7 +82,9 @@ export function Drawer({ open, onClose }: { open: boolean; onClose: () => void }
         ) : (
           <nav className="col g4">
             <L href="/categories" ic="ph-squares-four" t="كل الأقسام" />
-            {(cats ?? []).map((c) => <L key={c.id} href={`/c/${c.id}`} ic={c.icon || "ph-package"} t={c.name} img={c.image} />)}
+            {treeList(cats ?? []).map((c) => c.depth
+              ? <Link key={c.id} href={`/c/${c.id}`} className="dl" style={{ paddingInlineStart: 46, fontSize: 13.5, minHeight: 36 }} onClick={onClose}>{c.name}</Link>
+              : <L key={c.id} href={`/c/${c.id}`} ic={c.icon || "ph-package"} t={c.name} img={c.image} />)}
             {cats && !cats.length && <small className="mu" style={{ padding: 12 }}>لسه مفيش أقسام.</small>}
             {isAdmin && <><div className="dr-sep" /><L href="/admin/categories" ic="ph-plus-circle" t="إضافة / حذف / ترتيب الأقسام" /></>}
           </nav>

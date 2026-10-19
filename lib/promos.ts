@@ -4,6 +4,7 @@ import { withId } from "./store";
 import type { CartItem, Product, Promo, Tier } from "./types";
 import { priceFor } from "./pricing";
 import { catalog, touchCatalog } from "./catalogClient";
+import { productCats } from "./cats";
 
 /* ---------- reads / writes ---------- */
 let cache: { at: number; p: Promise<Promo[]> } | null = null;
@@ -41,7 +42,7 @@ export const promoStatus = (pr: Promo): [string, string] => {
   return ["شغال", "v"];
 };
 export const covers = (pr: Promo, p: Product) =>
-  pr.scope === "all" || (pr.scope === "category" ? (pr.categoryIds.includes(p.categoryId) || !!p.extraCats?.some((c) => pr.categoryIds.includes(c))) : pr.productIds.includes(p.id));
+  pr.scope === "all" || (pr.scope === "category" ? productCats(p).some((c) => pr.categoryIds.includes(c)) : pr.productIds.includes(p.id));
 
 /** Discounted price, rounded to a whole pound, never below 1. */
 export const discounted = (price: number, pr: Pick<Promo, "kind" | "value">) =>

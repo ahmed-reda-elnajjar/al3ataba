@@ -11,11 +11,45 @@ import { uploadImage } from "@/lib/img";
 import { useApp } from "@/lib/providers";
 import { useDragSort } from "@/lib/dnd";
 import type { Category } from "@/lib/types";
+import { childrenOf, topCats } from "@/lib/cats";
 
 export default function AdminCategories() {
   const { data, loading, reload } = useAsync(listCategories, []);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(ICONS[0]);
+  const [newParent, setNewParent] = useState("");
+  const [pick, setPick] = useState<string[]>([]);   // categories ticked for "move inside"
+  const [moveTo, setMoveTo] = useState("");
+  const [msg, setMsg] = useState("");
+  const all = data ?? [];
+  const mains = topCats(all);
+  const nameOf = (id?: string | null) => all.find((c) => c.id === id)?.name || "";
+  /** Put categories inside a main category (or back to the top level with ""). One level only. */
+  const setParent = async (ids: string[], parentId: string) => {
+    const b = writeBatch(dbI());
+    let n = 0;
+    for (const id of ids) {
+      if (id === parentId) continue;
+      if (parentId && childrenOf(all, id).length) continue; // a main category that has subs can't go inside another
+      b.update(doc(dbI(), "categories", id), { parentId: parentId || null }); n++;
+    }
+    await b.commit(); reload(); touchCatalog();
+    return n;
+  };
+  const moveSelected = async () => {
+    setErr(""); setMsg("");
+    if (!pick.length) return setErr("علّم على الأقسام اللي عايز تنقلها الأول.");
+    let target = moveTo;
+    if (target === "__new") {
+      const n = prompt("اسم القسم الرئيسي الجديد (مثال: اكسسوارات تلفونات):")?.trim();
+      if (!n) return;
+      const ref = await addDoc(collection(dbI(), "categories"), { name: n, icon: ICONS[0], order: 0, parentId: null });
+      target = ref.id; setMoveTo(ref.id);
+    }
+    const done = await setParent(pick, target);
+    setMsg(target ? `اتنقل ${done} قسم جوه "${nameOf(target) || "القسم الجديد"}" ✓` : `${done} قسم بقوا أقسام رئيسية ✓`);
+    setPick([]);
+  };
   const [err, setErr] = useState("");
   const { user } = useApp();
   const [up, setUp] = useState("");
@@ -30,7 +64,7 @@ export default function AdminCategories() {
   const add = async () => {
     if (name.trim().length < 2) return setErr("اكتب اسم القسم.");
     setErr("");
-    await addDoc(collection(dbI(), "categories"), { name: name.trim(), icon, order: (data?.length ?? 0) + 1 });
+    await addDoc(collection(dbI(), "categories"), { name: name.trim(), icon, order: (data?.length ?? 0) + 1, parentId: newParent || null });
     setName(""); reload(); touchCatalog();
   };
   const seed = async () => {
@@ -66,10 +100,31 @@ export default function AdminCategories() {
           <input className="in" style={{ maxWidth: 260 }} placeholder="اسم القسم" value={name} onChange={(e) => setName(e.target.value)} />
           <select className="in" style={{ maxWidth: 200 }} value={icon} onChange={(e) => setIcon(e.target.value)}>{ICONS.map((i) => <option key={i} value={i}>{i.replace("ph-", "")}</option>)}</select>
           <i className={`ph ${icon}`} style={{ color: "var(--pm)" }} />
+          <select className="in" style={{ maxWidth: 220 }} value={newParent} onChange={(e) => setNewParent(e.target.value)} aria-label="داخل قسم رئيسي">
+            <option value="">قسم رئيسي</option>
+            {mains.map((m) => <option key={m.id} value={m.id}>جوه: {m.name}</option>)}
+          </select>
           <button className="btn" onClick={add}>إضافة</button>
         </div>
         {err && <div className="err">{err}</div>}
       </div>
+      {all.length > 0 && (
+        <div className="card col" style={{ gap: 10 }}>
+          <b>تجميع الأقسام في قسم رئيسي <small>(مثال: كل أقسام الموبايل جوه "اكسسوارات تلفونات")</small></b>
+          <small>علّم على الأقسام من المربعات اللي في القائمة تحت، واختار القسم الرئيسي، ودوس "نقل". القسم الرئيسي بيعرض منتجات كل الأقسام اللي جواه، وفي الرئيسية بيظهر هو بس.</small>
+          <div className="row wrap">
+            <span className="sp"><b>{pick.length}</b> متعلّم</span>
+            <select className="in" style={{ maxWidth: 260 }} value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+              <option value="">طلّعهم أقسام رئيسية</option>
+              {mains.filter((m) => !pick.includes(m.id)).map((m) => <option key={m.id} value={m.id}>جوه: {m.name}</option>)}
+              <option value="__new">+ قسم رئيسي جديد…</option>
+            </select>
+            <button className="btn" onClick={moveSelected} disabled={!pick.length}>نقل</button>
+            {pick.length > 0 && <button className="btn o sm2" onClick={() => setPick([])}>شيل العلامات</button>}
+          </div>
+          {msg && <span className="ok">{msg}</span>}
+        </div>
+      )}
       {loading ? <div className="skel" /> : !data?.length ? (
         <div className="card col"><b>مفيش أقسام لسه</b><small>تقدر تضيف الأقسام الأساسية بضغطة واحدة وتعدّلها بعدين.</small><button className="btn" style={{ alignSelf: "flex-start" }} onClick={seed}>إضافة الأقسام الأساسية</button></div>
       ) : (
@@ -78,11 +133,24 @@ export default function AdminCategories() {
           {dnd.list.map((c, i) => (
             <div key={c.id} className="card row sortable" {...dnd.item(c.id)}>
               <button type="button" className="grip" aria-label="اسحب لترتيب القسم" {...dnd.handle(c.id)}><i className="ph ph-dots-six-vertical" /></button>
+              <input type="checkbox" checked={pick.includes(c.id)} onChange={(e) => setPick(e.target.checked ? [...pick, c.id] : pick.filter((x) => x !== c.id))} style={{ width: 20, height: 20, accentColor: "var(--pa)", flex: "none" }} aria-label="اختيار القسم" />
               <label title="صورة القسم" style={{ cursor: "pointer", position: "relative", flex: "none" }}>
                 {c.image ? <img src={sized(c.image, 120)} alt="" className="ph-thumb" /> : <span className="ph-thumb" style={{ display: "grid", placeItems: "center", color: "var(--gold)" }}>{up === c.id ? "…" : <i className="ph ph-camera-plus" />}</span>}
                 <input type="file" accept="image/*" hidden onChange={(e) => { setImg(c.id, e.target.files?.[0]); e.target.value = ""; }} />
               </label>
-              <input className="in sp" defaultValue={c.name} onBlur={(e) => e.target.value !== c.name && rename(c.id, e.target.value)} />
+              <div className="sp col" style={{ gap: 4 }}>
+                <input className="in" defaultValue={c.name} onBlur={(e) => e.target.value !== c.name && rename(c.id, e.target.value)} />
+                <div className="row wrap" style={{ gap: 6, fontSize: 12.5 }}>
+                  {childrenOf(all, c.id).length > 0
+                    ? <span className="bd" style={{ background: "var(--pa)", color: "#fff" }}>قسم رئيسي · جواه {childrenOf(all, c.id).length}</span>
+                    : (
+                      <select className="in" style={{ minHeight: 30, fontSize: 12.5, maxWidth: 220, padding: "0 8px" }} value={c.parentId && all.some((x) => x.id === c.parentId) ? c.parentId : ""} onChange={(e) => setParent([c.id], e.target.value)} aria-label="القسم الرئيسي">
+                        <option value="">قسم رئيسي</option>
+                        {mains.filter((m) => m.id !== c.id).map((m) => <option key={m.id} value={m.id}>جوه: {m.name}</option>)}
+                      </select>
+                    )}
+                </div>
+              </div>
               <button className="btn o sm2" disabled={i === 0} onClick={() => move(i, -1)} aria-label="لفوق"><i className="ph ph-arrow-up" /></button>
               <button className="btn o sm2" disabled={i === dnd.list.length - 1} onClick={() => move(i, 1)} aria-label="لتحت"><i className="ph ph-arrow-down" /></button>
               {c.image && <button className="btn o sm2" onClick={() => clearImg(c.id)} title="شيل الصورة"><i className="ph ph-image-broken" /></button>}

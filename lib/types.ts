@@ -25,7 +25,7 @@ export type Promo = {
   active: boolean; color?: string; image?: string; order?: number; createdAt?: { seconds: number };
   minQty?: number; // offer applies only when the cart holds at least this many pieces from the offer (mixing products allowed)
 };
-export type Category = { id: string; name: string; icon: string; order: number; image?: string };
+export type Category = { id: string; name: string; icon: string; order: number; image?: string; parentId?: string | null };
 export type Merchant = {
   id: string; name: string; type: string; governorate: string; city?: string; phone: string; about: string;
   regNo?: string; taxNo?: string; status: "pending" | "approved" | "rejected"; verified: boolean;

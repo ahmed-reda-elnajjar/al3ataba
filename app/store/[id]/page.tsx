@@ -1,4 +1,5 @@
 "use client";
+import { productCats } from "@/lib/cats";
 import Link from "next/link";
 import { useState } from "react";
 import { useParams } from "next/navigation";
@@ -24,7 +25,7 @@ export default function Store() {
   const name = m?.name || HOUSE.name;
   const products = data?.products ?? [];
   const cats = Array.from(new Map(products.map((p) => [p.categoryId, p.categoryName])).entries());
-  const shown = products.filter((p) => !cat || p.categoryId === cat || !!p.extraCats?.includes(cat));
+  const shown = products.filter((p) => !cat || productCats(p).includes(cat));
   return (
     <div className="wc">
       <div className="sthead">

@@ -1,4 +1,5 @@
 "use client";
+import { childrenOf, productCats, topCats, treeList } from "@/lib/cats";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
 const PAGE = 24;
@@ -56,7 +57,7 @@ function Results() {
     let a = items.filter((p) => {
       const hay = norm(`${p.name} ${p.description} ${p.categoryName} ${p.merchantName} ${(p.keywords || []).join(" ")}`);
       if (terms.some((t) => !hay.includes(t))) return false;
-      if (cat && p.categoryId !== cat && !p.extraCats?.includes(cat)) return false;
+      if (cat && !productCats(p).includes(cat)) return false;
       if (gov && p.governorate !== gov) return false;
       const [lo, hi] = priceRange(p);
       if (min && hi < Number(min)) return false;
@@ -79,7 +80,7 @@ function Results() {
     <div className="col" style={{ gap: 14 }}>
       <div className="fld"><label>القسم</label>
         <select className="in" value={cat} onChange={(e) => router.push(`/search?${new URLSearchParams({ ...(q ? { q } : {}), ...(e.target.value ? { cat: e.target.value } : {}) })}`)}>
-          <option value="">كل الأقسام</option>{data?.cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <option value="">كل الأقسام</option>{treeList(data?.cats ?? []).map((c) => <option key={c.id} value={c.id}>{c.depth ? `— ${c.name}` : c.name}</option>)}
         </select></div>
       <div className="fld"><label>السعر (ج.م)</label><div className="row"><input className="in" inputMode="numeric" placeholder="من" value={min} onChange={(e) => setMin(e.target.value)} /><input className="in" inputMode="numeric" placeholder="إلى" value={max} onChange={(e) => setMax(e.target.value)} /></div></div>
       <div className="fld"><label>أقصى حد أدنى للطلب</label><input className="in" inputMode="numeric" placeholder="مثال: 100" value={moq} onChange={(e) => setMoq(e.target.value)} /></div>
@@ -104,9 +105,21 @@ function Results() {
       {(data?.cats.length ?? 0) > 0 && (
         <div className="scr" style={{ marginBottom: 6 }}>
           <button className={`chip${!cat ? " on" : ""}`} style={{ minHeight: 32, fontSize: 13 }} onClick={() => go("")}>كل الأقسام</button>
-          {data!.cats.map((c) => <button key={c.id} className={`chip${cat === c.id ? " on" : ""}`} style={{ minHeight: 32, fontSize: 13 }} onClick={() => go(c.id)}>{c.name}</button>)}
+          {topCats(data!.cats).map((c) => <button key={c.id} className={`chip${cat === c.id || data!.cats.find((x) => x.id === cat)?.parentId === c.id ? " on" : ""}`} style={{ minHeight: 32, fontSize: 13 }} onClick={() => go(c.id)}>{c.name}</button>)}
         </div>
       )}
+      {(() => {
+        // inside a main category (or one of its subs): show its sub-categories
+        const main = data?.cats.find((x) => x.id === cat);
+        const pid = main?.parentId || main?.id || "";
+        const subs = pid ? childrenOf(data!.cats, pid) : [];
+        return subs.length > 0 && (
+          <div className="scr" style={{ marginBottom: 6 }}>
+            <button className={`chip${cat === pid ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => go(pid)}>الكل</button>
+            {subs.map((c) => <button key={c.id} className={`chip${cat === c.id ? " on" : ""}`} style={{ minHeight: 30, fontSize: 12.5 }} onClick={() => go(c.id)}>{c.name}</button>)}
+          </div>
+        );
+      })()}
       {showF && <div className="card sm mt">{filters}</div>}
       <div className="row mt" style={{ alignItems: "flex-start", gap: 24 }}>
         <aside className="card hm" style={{ width: 270, flex: "none", flexDirection: "column" }}><b style={{ marginBottom: 10 }}>فلترة النتائج</b>{filters}</aside>

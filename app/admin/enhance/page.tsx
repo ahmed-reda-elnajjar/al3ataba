@@ -1,4 +1,5 @@
 "use client";
+import { productCats } from "@/lib/cats";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { collection, getDocs } from "firebase/firestore";
@@ -27,7 +28,7 @@ export default function EnhancePage() {
   const [sel, setSel] = useState<string[]>([]);
   const shown = useMemo(() => {
     const n = norm(q);
-    return all.filter((p) => (!cat || p.categoryId === cat || !!p.extraCats?.includes(cat)) && (!n || norm(p.name).includes(n))
+    return all.filter((p) => (!cat || productCats(p).includes(cat)) && (!n || norm(p.name).includes(n))
       && (flt === "all" || (flt === "noimg" && !p.studio) || (flt === "notext" && !p.aiCopy) || (flt === "pending" && p.status === "pending")));
   }, [all, cat, flt, q]);
   const chosen = all.filter((p) => sel.includes(p.id));

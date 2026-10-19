@@ -3,6 +3,7 @@
 import type { User } from "firebase/auth";
 import type { Catalog } from "./catalog";
 import { authI } from "./firebase";
+import { registerCats } from "./cats";
 
 let bypass = false;
 let cache: { at: number; p: Promise<Catalog | null> } | null = null;
@@ -16,7 +17,7 @@ export function catalog(): Promise<Catalog | null> {
     cache = {
       at: Date.now(),
       p: fetch("/api/catalog").then((r) => (r.ok ? r.json() : null)).then((c: Catalog | null) => (c && Array.isArray(c.products) ? c : null))
-        .catch(() => null).then((c) => { if (!c) cache = null; return c; }),
+        .catch(() => null).then((c) => { if (!c) cache = null; else registerCats(c.categories); return c; }),
     };
   }
   return cache.p;

@@ -1,4 +1,5 @@
 "use client";
+import { childrenOf, topCats } from "@/lib/cats";
 import Link from "next/link";
 import { useState } from "react";
 import { useAsync } from "@/lib/hooks";
@@ -13,8 +14,9 @@ export default function Categories() {
   const { data, loading } = useAsync(async () => {
     // 3 product names per category as the subtitle (a few reads per category, not the whole catalogue)
     const cats = await listCategories();
-    const samples = await Promise.all(cats.map((c) => sampleCategory(c.id, 3).catch(() => [])));
-    return cats.map((c, i) => ({ ...c, sample: samples[i].map((p) => p.name).join(" - ") }));
+    const samples = await Promise.all(cats.map((c) => (c.parentId ? Promise.resolve([]) : sampleCategory(c.id, 3).catch(() => []))));
+    // main categories only; a main category's subtitle lists its sub-categories
+    return cats.map((c, i) => ({ ...c, sample: childrenOf(cats, c.id).map((x) => x.name).join(" · ") || samples[i].map((p) => p.name).join(" - ") })).filter((c) => topCats(cats).some((t) => t.id === c.id));
   }, []);
   const { list: ordered, offers } = usePersonalCats(data ?? EMPTY);
   const list = ordered.filter((c) => !q.trim() || c.name.includes(q.trim()));

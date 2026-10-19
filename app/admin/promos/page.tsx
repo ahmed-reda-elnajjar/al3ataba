@@ -1,4 +1,5 @@
 "use client";
+import { productCats, treeList } from "@/lib/cats";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { st } from "@/lib/style";
@@ -41,7 +42,7 @@ export default function AdminPromos() {
   const affected = useMemo(() => {
     if (!d) return 0;
     if (d.scope === "all") return products.length;
-    return d.scope === "category" ? products.filter((p) => d.categoryIds.includes(p.categoryId) || p.extraCats?.some((c) => d.categoryIds.includes(c))).length : d.productIds.length;
+    return d.scope === "category" ? products.filter((p) => productCats(p).some((c) => d.categoryIds.includes(c))).length : d.productIds.length;
   }, [d, products]);
 
   const pickImg = async (f?: File) => {
@@ -103,7 +104,7 @@ export default function AdminPromos() {
 
         {d.scope === "category" && (
           <div className="row wrap g8">
-            {cats.map((c) => <button key={c.id} type="button" className={`chip${d.categoryIds.includes(c.id) ? " on" : ""}`} onClick={() => toggle("categoryIds", c.id)}>{d.categoryIds.includes(c.id) && <i className="ph ph-check" />} {c.name}</button>)}
+            {treeList(cats).map((c) => <button key={c.id} type="button" className={`chip${d.categoryIds.includes(c.id) ? " on" : ""}`} style={c.depth ? { fontSize: 12.5, opacity: 0.9 } : { fontWeight: 700 }} onClick={() => toggle("categoryIds", c.id)}>{d.categoryIds.includes(c.id) && <i className="ph ph-check" />} {c.depth ? "— " : ""}{c.name}</button>)}
             {!cats.length && <small>مفيش أقسام لسه.</small>}
           </div>
         )}

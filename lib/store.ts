@@ -4,14 +4,17 @@ import { DEFAULT_SETTINGS } from "./config";
 import { ms } from "./format";
 import type { Category, Merchant, Product, Settings } from "./types";
 import { catalog } from "./catalogClient";
+import { familyIds, productCats, registerCats } from "./cats";
 
 /** Is the product in this category (its main one or one of its extra ones)? */
-export const inCat = (p: Pick<Product, "categoryId" | "extraCats">, cat: string) => p.categoryId === cat || !!p.extraCats?.includes(cat);
+/** Is the product in this category (main or extra one, or one of its sub-categories)? */
+export const inCat = (p: Pick<Product, "categoryId" | "extraCats">, cat: string) => productCats(p).includes(cat);
 /** Products whose EXTRA categories include `cat` (main-category ones come from the normal queries). Equality + array-contains → no index needed. */
 async function extraIn(cat: string, n: number): Promise<Product[]> {
   try {
-    const s = await getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where("extraCats", "array-contains", cat), limit(n)));
-    return s.docs.map((d) => withId<Product>(d)).filter((p) => p.categoryId !== cat);
+    const fam = familyIds(cat).slice(0, 10);
+    const s = await getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where("extraCats", "array-contains-any", fam), limit(n)));
+    return s.docs.map((d) => withId<Product>(d)).filter((p) => !fam.includes(p.categoryId));
   } catch { return []; }
 }
 
@@ -32,9 +35,11 @@ export async function listMerchantProducts(merchantId: string): Promise<Product[
   return newest(s.docs.map((d) => withId<Product>(d)));
 }
 export async function listCategories(): Promise<Category[]> {
-  const c = await catalog(); if (c?.categories.length) return c.categories;
+  const c = await catalog(); if (c?.categories.length) { registerCats(c.categories); return c.categories; }
   const s = await getDocs(collection(dbI(), "categories"));
-  return s.docs.map((d) => withId<Category>(d)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const list = s.docs.map((d) => withId<Category>(d)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  registerCats(list);
+  return list;
 }
 export async function listApprovedMerchants(): Promise<Merchant[]> {
   const c = await catalog(); if (c) return [...c.merchants].sort((a, b) => Number(b.verified) - Number(a.verified));
@@ -83,7 +88,8 @@ export async function pageActiveProducts(size: number, opts: { cat?: string; aft
     return { items: list.slice(from, from + size), cursor: { offset: from + size }, more: list.length > from + size };
   }
   const after = opts.after && !("offset" in opts.after) ? opts.after : null;
-  const base = [where("status", "==", "active"), ...(opts.cat ? [where("categoryId", "==", opts.cat)] : [])];
+  const fam = opts.cat ? familyIds(opts.cat).slice(0, 30) : [];
+  const base = [where("status", "==", "active"), ...(fam.length > 1 ? [where("categoryId", "in", fam)] : opts.cat ? [where("categoryId", "==", opts.cat)] : [])];
   try {
     const q = query(collection(dbI(), "products"), ...base, orderBy("createdAt", "desc"), ...(after ? [startAfter(after)] : []), limit(size + 1));
     const [s, extra] = await Promise.all([getDocs(q), opts.cat && !after ? extraIn(opts.cat, 60) : Promise.resolve([] as Product[])]);
@@ -99,7 +105,7 @@ export async function pageActiveProducts(size: number, opts: { cat?: string; aft
 /** A few products from the same category (product page "similar", categories page preview). Equality filters only → no index needed. */
 export async function sampleCategory(cat: string, n: number, exclude = ""): Promise<Product[]> {
   const c = await catalog(); if (c) return c.products.filter((p) => inCat(p, cat) && p.id !== exclude).slice(0, n);
-  const [s, extra] = await Promise.all([getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), where("categoryId", "==", cat), limit(n + 1))), extraIn(cat, n)]);
+  const [s, extra] = await Promise.all([getDocs(query(collection(dbI(), "products"), where("status", "==", "active"), (() => { const f = familyIds(cat).slice(0, 30); return f.length > 1 ? where("categoryId", "in", f) : where("categoryId", "==", cat); })(), limit(n + 1))), extraIn(cat, n)]);
   return [...s.docs.map((d) => withId<Product>(d)), ...extra].filter((p) => p.id !== exclude).slice(0, n);
 }
 

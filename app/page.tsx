@@ -1,4 +1,6 @@
 "use client";
+import { topCats } from "@/lib/cats";
+import { useMemo } from "react";
 import Link from "next/link";
 import { st } from "@/lib/style";
 import { useAsync } from "@/lib/hooks";
@@ -22,7 +24,8 @@ export default function Home() {
   });
   const verified = new Set((data?.merchants ?? []).filter((m) => m.verified).map((m) => m.id));
   const products = data?.products ?? [];
-  const { list: cats, offers } = usePersonalCats(data?.cats ?? EMPTY);
+  const tops = useMemo(() => topCats(data?.cats ?? EMPTY), [data]); // sub-categories live inside their main category
+  const { list: cats, offers } = usePersonalCats(tops);
   return (
     <div className="wc">
       <HeroSlider />
