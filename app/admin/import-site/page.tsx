@@ -39,7 +39,7 @@ function inStockOptions(p: SrcProduct) {
 }
 type SrcCat = { id: number; name: string; childes?: SrcCat[] };
 const flatCats = (cs: SrcCat[]): SrcCat[] => cs.flatMap((c) => [c, ...flatCats(c.childes || [])]);
-type Row = { key: string; src: SrcProduct; stock: number | null; out: boolean; docId?: string; docStatus?: string; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
+type Row = { key: string; src: SrcProduct; stock: number | null; out: boolean; docId?: string; docStatus?: string; byName?: boolean; name: string; base: number; pack: string; price: string; edited?: boolean; moq: string; cat: string; imgs: string[]; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
 
 const COLOR_AR: Record<string, string> = { black: "أسود", white: "أبيض", red: "أحمر", blue: "أزرق", green: "أخضر", yellow: "أصفر", pink: "بينك", purple: "موف", gray: "رمادي", grey: "رمادي", silver: "فضي", gold: "ذهبي", brown: "بني", orange: "برتقالي", navy: "كحلي", beige: "بيج" };
 const arr = <T,>(v: unknown): T[] => { if (Array.isArray(v)) return v as T[]; if (typeof v === "string") { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } } return []; };
@@ -115,11 +115,13 @@ export default function ImportSite() {
     let seen = new Set<string>();
     let names = new Set<string>();
     const ids: Record<string, { id: string; status: string }> = {};
+    const byName: Record<string, { id: string; status: string }> = {};
     try {
       const old = await getDocs(collection(dbI(), "products")); // admin: every product, any source
       seen = new Set(old.docs.map((d) => d.get("sourceId") as string).filter(Boolean));
       for (const d of old.docs) { const sid = d.get("sourceId") as string; if (sid) ids[sid] = { id: d.id, status: String(d.get("status") || "") }; }
       names = new Set(old.docs.map((d) => norm(String(d.get("name") || ""))).filter(Boolean));
+      for (const d of old.docs) { const n = norm(String(d.get("name") || "")); if (n && !byName[n]) byName[n] = { id: d.id, status: String(d.get("status") || "") }; }
     } catch { /* best effort */ }
     const host = new URL(b).host;
     setRows(uniq.map((p) => {
@@ -128,7 +130,8 @@ export default function ImportSite() {
       const dup = seen.has(key) || names.has(norm(p.name || ""));
       const { stock, out } = availability(p);
       if (!seen.has(key) && out) return { key, src: p, stock, out, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: false, note: "خلصان من المخزن عندهم" };
-      return { key, src: p, stock, out, docId: ids[key]?.id, docStatus: ids[key]?.status, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: !dup, state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : dup ? "فيه منتج عندك بنفس الاسم — علّمه لو مختلف" : "" };
+      const m = ids[key] || (dup ? byName[norm(p.name || "")] : undefined);
+      return { key, src: p, stock, out, docId: m?.id, docStatus: m?.status, byName: !ids[key] && !!m, name: p.name || "", base: finalPrice(p), pack: "", price: "", moq, cat: srcCat(p), imgs: imageUrls(b, p), on: false, state: seen.has(key) ? "ok" as const : undefined, note: seen.has(key) ? "موجود قبل كده" : dup ? "فيه منتج عندك بنفس الاسم — علّمه لو مختلف" : "" };
     }));
     setSrcCats(flatCats(categories));
     // auto-match categories by name
@@ -140,7 +143,7 @@ export default function ImportSite() {
     }
     setMap(m);
     const fresh = uniq.filter((p) => !seen.has(`${host}:${p.id}`) && !names.has(norm(p.name || ""))).length;
-    setMsg(`اتلقى ${uniq.length} منتج — منهم ${fresh} جديد و ${uniq.length - fresh} موجودين عندك قبل كده`);
+    setMsg(`اتراجع ${uniq.length} منتج عند المورد — ${uniq.length - fresh} موجودين عندك و ${fresh} مش موجودين. ماتضافش أي حاجة.`);
   };
 
   const fetchAll = async () => {
@@ -191,7 +194,7 @@ export default function ImportSite() {
   const visible = rows.filter((r) => (!onlyPublished || r.src.published !== 0) && (!hideOut || !r.out || r.state === "ok"));
   const outCount = rows.filter((r) => r.out && r.state !== "ok").length;
   // already on our site but sold out at the partner → offer to hide them
-  const soldOutHere = rows.filter((r) => r.out && r.docId && r.docStatus === "active");
+  const soldOutHere = rows.filter((r) => r.out && r.docId && !r.byName && r.docStatus === "active"); // only exact links to this supplier, never a same-name guess
   const [hmsg, setHmsg] = useState("");
   const hideSoldOut = async () => {
     if (!soldOutHere.length || !confirm(`إخفاء ${soldOutHere.length} منتج خلصوا من عند المورد؟ (تقدر تنشرهم تاني بعدين)`)) return;
@@ -300,8 +303,10 @@ export default function ImportSite() {
         </details>
       </div>
 
+      {rows.length > 0 && <Review rows={rows} catName={catName} onHide={hideSoldOut} hmsg={hmsg} />}
       {rows.length > 0 && (
-        <>
+        <details className="card col" style={{ gap: 12 }}>
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>إضافة منتجات جديدة للموقع (اختياري — مفيش حاجة بتتضاف غير لما تعلّم عليها وتدوس إضافة)</summary>
           <div className="card col">
             <b>ربط الأقسام</b>
             <small>كل قسم عندهم يروح لأي قسم عندك، أو يتعمل قسم جديد بنفس الاسم.</small>
@@ -325,19 +330,6 @@ export default function ImportSite() {
               <label className="chk"><input type="checkbox" checked={onlyPublished} onChange={(e) => setOnlyPublished(e.target.checked)} />المنشور عندهم بس</label>
               <label className="chk"><input type="checkbox" checked={hideOut} onChange={(e) => setHideOut(e.target.checked)} />إخفاء الخلصان من المخزن ({outCount})</label>
             </div>
-            {soldOutHere.length > 0 && (
-              <div className="alert row wrap" style={{ borderColor: "var(--err)" }}>
-                <i className="ph ph-package" style={{ color: "var(--err)", fontSize: 20 }} />
-                <span className="sp"><b>{soldOutHere.length}</b> منتج منشورين عندك بس خلصوا من المخزن عند المورد.</span>
-                <button className="btn r sm2" onClick={hideSoldOut}>إخفاءهم من الموقع</button>
-                <ul style={{ width: "100%", margin: "4px 0 0", paddingInlineStart: 20, lineHeight: 1.9, fontSize: 14 }}>
-                  {soldOutHere.map((r) => { const a = availability(r.src); return (
-                    <li key={r.key}><a href={`/admin/products/${r.docId}`} target="_blank" rel="noreferrer" style={{ color: "var(--pm)", fontWeight: 600 }}>{r.name}</a> <small>— المتاح عندهم {a.stock ?? 0}، وأقل طلب {a.moq}</small></li>
-                  ); })}
-                </ul>
-              </div>
-            )}
-            {hmsg && <span className="ok">{hmsg}</span>}
             <div className="col g8"><b>نسبة الزيادة حسب سعر القطعة والكمية</b><RulesEditor value={rules} onChange={setRules} /></div>
             <div className="row wrap">
               <b className="sp">{visible.length} منتج · {chosen.length} متعلّم · {done} اتضاف للمراجعة</b>
@@ -369,8 +361,74 @@ export default function ImportSite() {
               </div>
             ))}
           </div>
-        </>
+        </details>
       )}
     </>
+  );
+}
+
+/* ---------- review report: what the supplier has vs what's on our site, with stock per product ---------- */
+function Review({ rows, catName, onHide, hmsg }: { rows: Row[]; catName: (id: string) => string; onHide: () => void; hmsg: string }) {
+  const [f, setF] = useState("all"); const [q, setQ] = useState("");
+  const on = (r: Row) => !!r.docId;
+  const st = (r: Row) => (!r.docId ? "مش موجود عندك" : r.docStatus === "active" ? "منشور عندك" : r.docStatus === "pending" ? "عندك (مستني مراجعة)" : "عندك (مخفي)");
+  const models = (r: Row) => arr<{ type?: string; qty?: number | string }>(r.src.variation).filter((v) => v && v.type).map((v) => `${v.type}: ${Number(v.qty) || 0}`);
+  const groups: Record<string, (r: Row) => boolean> = {
+    all: () => true,
+    have: on,
+    missing: (r) => !on(r),
+    missingAvail: (r) => !on(r) && !r.out,
+    out: (r) => r.out,
+    danger: (r) => r.out && !r.byName && r.docStatus === "active",
+    back: (r) => !r.out && on(r) && r.docStatus === "hidden",
+  };
+  const label: Record<string, string> = { all: "الكل", have: "موجود عندك", missing: "مش موجود عندك", missingAvail: "مش موجود ومتاح عندهم", out: "خلصان عند المورد", danger: "منشور عندك وخلصان عندهم", back: "مخفي عندك ورجع متاح" };
+  const n = (k: string) => rows.filter(groups[k]).length;
+  const t = norm(q);
+  const list = rows.filter(groups[f]).filter((r) => !t || norm(r.name).includes(t)).sort((a, b) => (b.stock ?? -1) - (a.stock ?? -1));
+  const totalStock = rows.reduce((a, r) => a + (r.stock ?? 0), 0);
+  const csv = () => {
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const head = ["المنتج", "القسم عندهم", "الحالة عندك", "المخزون عندهم", "أقل طلب", "متاح؟", "السعر عندهم", "الموديلات"];
+    const lines = list.map((r) => [r.name, catName(r.cat), st(r), r.stock ?? "", availability(r.src).moq, r.out ? "خلصان" : "متاح", r.base, models(r).join(" | ")].map(esc).join(","));
+    const blob = new Blob(["\ufeff" + [head.map(esc).join(","), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `supplier-review-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  };
+  return (
+    <div className="card col" style={{ gap: 12 }}>
+      <div className="row wrap" style={{ gap: 8 }}><b className="sp" style={{ fontSize: 17 }}>تقرير المراجعة</b><button className="btn o sm2" onClick={csv}><i className="ph ph-file-csv" />تصدير Excel</button></div>
+      <div className="grid" style={{ ["--m" as string]: 2, ["--d" as string]: 4 }}>
+        <div className="stat"><small>منتجات عند المورد</small><b>{rows.length}</b><small className="mu">إجمالي القطع في مخزنهم: {totalStock.toLocaleString("en-US")}</small></div>
+        <div className="stat"><small>موجود عندك</small><b>{n("have")}</b><small className="mu">منشور {rows.filter((r) => r.docStatus === "active").length} · مخفي/مراجعة {n("have") - rows.filter((r) => r.docStatus === "active").length}</small></div>
+        <div className="stat"><small>مش موجود عندك</small><b>{n("missing")}</b><small className="mu">منهم متاح عندهم {n("missingAvail")}</small></div>
+        <div className="stat"><small>خلصان عند المورد</small><b>{n("out")}</b><small className="mu" style={n("danger") ? { color: "#b3261e", fontWeight: 700 } : undefined}>منشور عندك وخلصان: {n("danger")}</small></div>
+      </div>
+      {n("danger") > 0 && <div className="alert row wrap" style={{ gap: 8 }}><span className="sp"><b>{n("danger")}</b> منتج منشور عندك والمورد مبقاش عنده كمية تكفي أقل طلب.</span><button className="btn r sm2" onClick={onHide}>إخفاءهم من الموقع</button></div>}
+      {n("back") > 0 && <div className="alert row wrap" style={{ gap: 8 }}><span className="sp"><b>{n("back")}</b> منتج مخفي عندك ورجع متاح عند المورد — تقدر تنشره تاني من المنتجات.</span></div>}
+      {hmsg && <span className="ok">{hmsg}</span>}
+      <div className="scr">{Object.keys(groups).map((k) => <button key={k} className={`chip${f === k ? " on" : ""}`} onClick={() => setF(k)}>{label[k]} ({n(k)})</button>)}</div>
+      <input className="in" placeholder="ابحث باسم المنتج" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div style={{ overflowX: "auto" }}>
+        <table className="tbl">
+          <thead><tr>{["", "المنتج", "عندك", "المخزون عندهم", "أقل طلب", "السعر عندهم"].map((h) => <th key={h} style={{ textAlign: "start", fontSize: 12.5, color: "var(--mu)" }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {list.slice(0, 800).map((r) => {
+              const a = availability(r.src), ms = models(r);
+              return (
+                <tr key={r.key}>
+                  <td style={{ width: 52 }}>{r.imgs[0] ? <img src={r.imgs[0]} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8 }} loading="lazy" /> : null}</td>
+                  <td style={{ fontSize: 13.5 }}>{r.name}<br /><small className="mu">{catName(r.cat)}{ms.length ? ` · الموديلات: ${ms.join("، ")}` : ""}</small></td>
+                  <td style={{ fontSize: 13 }}>{r.docId ? <a href={`/admin/products/${r.docId}`} target="_blank" rel="noreferrer" style={{ color: "var(--pm)" }}>{st(r)}</a> : <span className="mu">{st(r)}</span>}{r.byName ? <><br /><small className="mu">(متطابق بالاسم)</small></> : null}</td>
+                  <td><b style={{ color: r.out ? "#b3261e" : "#1e6b43" }}>{r.stock === null ? "غير محدد" : r.stock.toLocaleString("en-US")}</b>{r.out ? <><br /><small style={{ color: "#b3261e" }}>خلصان</small></> : null}</td>
+                  <td>{a.moq}</td>
+                  <td>{r.base} ج.م</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {list.length > 800 && <small className="mu">بيظهر أول 800 — استخدم البحث أو التصدير للباقي.</small>}
+    </div>
   );
 }
