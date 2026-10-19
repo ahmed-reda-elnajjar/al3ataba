@@ -1,4 +1,5 @@
 "use client";
+import { flyTo } from "@/lib/fly";
 /* البيع بالعمولة — the reseller's area: apply, browse products with commission, build an order for a customer,
  * follow orders, and the commission wallet. All reads/writes go through /api/resell/* (prices re-checked on the server). */
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -105,6 +106,13 @@ function Body() {
   const [draft, setDraft] = useState<Draft>({ lines: [], customer: { ...EMPTY_CUSTOMER } });
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { setDraft(loadDraft()); setLoaded(true); }, []);
+  useEffect(() => {
+    const h = document.querySelector(".hdr") as HTMLElement | null;
+    if (!h) return;
+    const set = () => document.documentElement.style.setProperty("--hdr-h", `${h.offsetHeight}px`);
+    set(); const ro = new ResizeObserver(set); ro.observe(h);
+    return () => ro.disconnect();
+  }, []);
   useEffect(() => { if (loaded) try { localStorage.setItem(DRAFT, JSON.stringify(draft)); } catch { /* ignore */ } }, [draft, loaded]);
 
   if (!user || acc.loading) return <div className="wc"><div className="skel" /></div>;
@@ -119,6 +127,7 @@ function Body() {
   const orders = acc.data?.orders ?? [], payouts = acc.data?.payouts ?? [];
   const w = wallet(orders, payouts, rs.holdDays);
   const addLine = (p: Product) => setDraft((d) => (d.lines.some((l) => l.productId === p.id) ? d : { ...d, lines: [...d.lines, { productId: p.id, qty: minQty(p), commission: null }] }));
+  const removeLine = (id: string) => setDraft((d) => ({ ...d, lines: d.lines.filter((l) => l.productId !== id) }));
 
   return (
     <div className="wc">
@@ -127,12 +136,16 @@ function Body() {
         <span className="bd" style={{ background: "#e6f4ec", color: "#1e6b43" }}>متاح: {ji(w.available)}</span>
         <span className="bd" style={{ background: "#fff4d6", color: "#8a6100" }}>معلّق: {ji(w.pending)}</span>
       </div>
-      <div className="seg" style={{ marginBottom: 14, overflowX: "auto" }}>
-        {[["products", "المنتجات"], ["order", `الطلب${draft.lines.length ? ` (${draft.lines.length})` : ""}`], ["orders", "طلباتي"], ["wallet", "المحفظة"], ["profile", "حسابي"]].map(([k, t]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => go(k)}>{t}</button>)}
+      <div className="seg rs-tabs" style={{ marginBottom: 14, overflowX: "auto" }}>
+        {[["products", "المنتجات"], ["order", "الطلب"], ["orders", "طلباتي"], ["wallet", "المحفظة"], ["profile", "حسابي"]].map(([k, t]) => (
+          <button key={k} id={k === "order" ? "rs-cart" : undefined} className={tab === k ? "on" : ""} onClick={() => go(k)}>
+            {k === "order" ? <span className="rs-cart"><i className="ph ph-shopping-cart-simple" />{t}{draft.lines.length > 0 && <b className="rs-cnt">{draft.lines.length}</b>}</span> : t}
+          </button>
+        ))}
       </div>
-      {tab === "products" && <Products loading={cat.loading} products={products} cats={cats} rs={rs} promos={promos} inDraft={new Set(draft.lines.map((l) => l.productId))} onAdd={addLine} goOrder={() => go("order")} />}
+      {tab === "products" && <Products loading={cat.loading} products={products} cats={cats} rs={rs} promos={promos} inDraft={new Set(draft.lines.map((l) => l.productId))} onAdd={addLine} onRemove={removeLine} goOrder={() => go("order")} />}
       {tab === "order" && <OrderForm draft={draft} setDraft={setDraft} byId={byId} cats={cats} rs={rs} promos={promos} loading={cat.loading} user={user} onDone={() => { acc.reload(); go("orders"); }} />}
-      {tab === "orders" && <Orders data={orders} />}
+      {tab === "orders" && <Orders data={orders} user={user} reload={acc.reload} />}
       {tab === "wallet" && <Wallet w={w} orders={orders} payouts={payouts} me={me} user={user} holdDays={rs.holdDays ?? 3} reload={acc.reload} />}
       {tab === "profile" && <Apply user={user} me={me} onSaved={acc.reload} />}
     </div>
@@ -140,7 +153,7 @@ function Body() {
 }
 
 /* ---------- products with commission ---------- */
-function Products({ loading, products, cats, rs, promos, inDraft, onAdd, goOrder }: { loading: boolean; products: Product[]; cats: Category[]; rs: ResellSettings; promos: Promo[]; inDraft: Set<string>; onAdd: (p: Product) => void; goOrder: () => void }) {
+function Products({ loading, products, cats, rs, promos, inDraft, onAdd, onRemove, goOrder }: { loading: boolean; products: Product[]; cats: Category[]; rs: ResellSettings; promos: Promo[]; inDraft: Set<string>; onAdd: (p: Product) => void; onRemove: (id: string) => void; goOrder: () => void }) {
   const [q, setQ] = useState(""); const [c, setC] = useState(""); const [n, setN] = useState(60);
   const all = useMemo(() => {
     const t = norm(q).split(" ").filter(Boolean);
@@ -172,7 +185,9 @@ function Products({ loading, products, cats, rs, promos, inDraft, onAdd, goOrder
                   <span className="mu">تبيع للعميل بـ {ji(base + com)}</span>
                   {wb > 0 && mq < wm && <small className="mu">جملة من {wm} {p.unit}: {ji(wb)} للقطعة</small>}
                 </div>
-                <button className={`btn sm2 ${inDraft.has(p.id) ? "o" : ""}`} onClick={() => onAdd(p)} disabled={inDraft.has(p.id)}>{inDraft.has(p.id) ? <><i className="ph ph-check" />في الطلب</> : <><i className="ph ph-plus" />أضف للطلب</>}</button>
+                {inDraft.has(p.id)
+                  ? <button className="btn sm2 o rs-rm" onClick={() => onRemove(p.id)}><i className="ph ph-x" />إلغاء من الطلب</button>
+                  : <button className="btn sm2" onClick={(e) => { flyTo(e.currentTarget.closest(".card")?.querySelector("a"), document.getElementById("rs-cart")); onAdd(p); }}><i className="ph ph-plus" />أضف للطلب</button>}
               </div>
             );
           })}
@@ -287,8 +302,19 @@ function OrderForm({ draft, setDraft, byId, cats, rs, promos, loading, user, onD
 }
 
 /* ---------- orders ---------- */
-function Orders({ data }: { data: ROrder[] }) {
+function Orders({ data, user, reload }: { data: ROrder[]; user: User; reload: () => void }) {
   const [f, setF] = useState("");
+  const [busy, setBusy] = useState("");
+  const cancel = async (o: ROrder) => {
+    if (!window.confirm(`إلغاء طلب ${o.customer.name}؟`)) return;
+    setBusy(o.id);
+    try {
+      const r = await fetch(`/api/resell/order?id=${encodeURIComponent(o.id)}`, { method: "DELETE", headers: { "x-firebase-token": await user.getIdToken() } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "حصلت مشكلة");
+      reload();
+    } catch (e) { window.alert((e as Error).message); } finally { setBusy(""); }
+  };
   const [open, setOpen] = useState("");
   const list = data.filter((o) => !f || o.status === f);
   const count = (s: string) => data.filter((o) => o.status === s).length;
@@ -310,6 +336,7 @@ function Orders({ data }: { data: ROrder[] }) {
                   <span>العميل يدفع: <b>{ji(o.total)}</b></span>
                   <span style={{ color: lost ? "#b3261e" : "#1e6b43" }}>عمولتك: <b>{ji(o.commissionTotal)}</b>{lost ? " (مش هتتحسب)" : o.status === "delivered" ? "" : " (لما يتسلّم)"}</span>
                   <small className="mu">#{o.id.slice(0, 6)}</small>
+                  {o.status === "new" && <button className="btn sm2 o rs-rm" style={{ marginInlineStart: "auto" }} disabled={busy === o.id} onClick={(e) => { e.stopPropagation(); cancel(o); }}><i className="ph ph-x" />{busy === o.id ? "جاري الإلغاء…" : "إلغاء الطلب"}</button>}
                 </div>
                 {open === o.id && (
                   <div className="col" style={{ gap: 4, borderTop: "1px solid var(--bd)", paddingTop: 8, fontSize: 13 }}>

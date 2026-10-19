@@ -20,7 +20,7 @@ export function Logo({ light = false, size = 38, href = "/", onClick, className 
   return (
     <Link href={href} className={`logo${light ? " light" : ""}${className ? " " + className : ""}`} onClick={onClick} aria-label="العتبة أونلاين">
       <Mark size={size} light={light} />
-      <span className="lt"><b>العتبة أونلاين</b><small>ATABA ONLINE</small></span>
+      <span className="lt"><b className="lf">العتبة أونلاين</b><b className="ls">عتبة</b><small>ATABA ONLINE</small></span>
     </Link>
   );
 }

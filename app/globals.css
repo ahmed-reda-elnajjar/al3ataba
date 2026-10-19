@@ -373,10 +373,24 @@ a.card:hover{border-color:var(--gold)}
 .hico i{font-size:27px}.hico:active{background:#ffffff1a}
 .hico .cnt{top:0;inset-inline-end:-2px}
 @media(max-width:899px){
- .hlogo svg{width:28px;height:28px}
- .hlogo b{font-size:16px}
- .hlogo small{font-size:6.5px;letter-spacing:.28em}
+ .hlogo{gap:6px}
+ .hlogo svg{width:22px;height:22px}
+ .hlogo b{font-size:15px}
+ .hlogo .lf,.hlogo small{display:none}
+ /* shorter hero + smaller section titles so products show on the first screen */
+ .hslide{margin-bottom:14px}
+ .hero2{min-height:118px;border-radius:14px}
+ .hero2 .tx{padding:12px 16px;gap:6px}
+ .hero2 h1{font-size:17px;line-height:1.35}
+ .hero2 p{font-size:12px;line-height:1.5}
+ .hero2 .btn{min-height:32px!important;padding:0 14px!important;font-size:13px}
+ .hs-off{font-size:12px;padding:2px 9px}
+ .hs-dots{bottom:6px}
+ .sec-h h2{font-size:15.5px}
+ .sec-h a{font-size:12.5px}
 }
+.logo .ls{display:none}
+@media(max-width:899px){.hlogo .ls{display:inline}}
 .addr-line{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;font-weight:300;color:var(--goldl);width:100%;box-sizing:border-box;white-space:nowrap;overflow:hidden}
 .addr-line span{overflow:hidden;text-overflow:ellipsis}
 .addr-line b{font-weight:600;color:#fff}
@@ -441,3 +455,10 @@ a.card:hover{border-color:var(--gold)}
 :root{--s1:#2a78d6;--s2:#eb6834}
 .dash2{display:grid;gap:14px;grid-template-columns:1fr}
 @media(min-width:1000px){.dash2{grid-template-columns:2fr 1fr}}
+
+/* reseller tabs stay under the header so the order (cart) is always visible */
+.rs-tabs{position:sticky;top:var(--hdr-h,64px);z-index:80;box-shadow:0 4px 12px #0a342714}
+.rs-cart{display:inline-flex;align-items:center;gap:5px;position:relative}
+.rs-cart i{font-size:18px}
+.rs-cnt{background:#c0392b;color:#fff;border-radius:20px;min-width:20px;height:20px;padding:0 5px;display:inline-grid;place-items:center;font-size:12px;line-height:1}
+.btn.o.rs-rm{color:#b3261e;border-color:#e8b4b0}

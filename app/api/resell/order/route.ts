@@ -1,10 +1,11 @@
 /* A reseller places an order for their customer. Prices are computed HERE (never trusted from the browser). */
 import { userFromToken } from "@/lib/serverAuth";
-import { addDocSA, getDocSA, listSA } from "@/lib/sa";
+import { addDocSA, getDocSA, listSA, patchDocSA } from "@/lib/sa";
 import { registerCats } from "@/lib/cats";
 import { GOVERNORATES } from "@/lib/config";
 import { PHONE_RE, fullAddress, baseUnit, canResell, defaultCommission, isRetail, maxQty, minQty, money, normPhone, resellSettings, shipFor, type RCustomer, type RItem, type Reseller } from "@/lib/resell";
 import type { Category, Product, Promo, Settings } from "@/lib/types";
+import type { ROrder } from "@/lib/resell";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -70,5 +71,23 @@ export async function POST(req: Request) {
   } catch (e) {
     const x = e as Error & { status?: number };
     return bad(String(x.message || e), x.status || 500);
+  }
+}
+
+/** The reseller cancels their own order — only while it is still "new" (before our team confirms it). */
+export async function DELETE(req: Request) {
+  const user = await userFromToken(req.headers.get("x-firebase-token") || "");
+  if (!user) return bad("سجّل دخول الأول", 401);
+  try {
+    const id = String(new URL(req.url).searchParams.get("id") || "").replace(/[^\w-]/g, "");
+    if (!id) return bad("الطلب مش موجود");
+    const o = await getDocSA<ROrder>(`rorders/${id}`);
+    if (!o || o.resellerId !== user.uid) return bad("الطلب مش موجود", 404);
+    if (o.status !== "new") return bad("مينفعش تلغي الطلب بعد ما اتأكد — كلّم الدعم");
+    const now = Date.now();
+    await patchDocSA(`rorders/${id}`, { status: "cancelled", history: [...(o.history || []), { status: "cancelled", at: now }] });
+    return Response.json({ ok: true });
+  } catch (e) {
+    return bad(String((e as Error).message || e), 500);
   }
 }
