@@ -43,9 +43,9 @@ i.ph{font-size:22px;vertical-align:middle}
 .hdr .in-row{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:14px}
 .hdr .srch{border-color:transparent}
 .logo{display:flex;align-items:center;gap:8px;flex:none;line-height:1}
-.logo .lt{display:flex;flex-direction:column;gap:3px}
-.logo b{font:700 21px Alexandria,sans-serif;color:var(--pd)}
-.logo small{font:600 8px sans-serif;letter-spacing:.32em;color:var(--gold)}
+.logo .lt{display:flex;flex-direction:column;align-items:center;gap:4px}
+.logo b{font:800 24px Alexandria,sans-serif;color:var(--pd);line-height:1}
+.logo small{font:600 8px Alexandria,sans-serif;letter-spacing:.2em;color:var(--gold)}
 .logo.light b{color:#fff}.logo.light small{color:var(--gold2)}
 .srch{display:flex;flex:1;border:1.5px solid var(--bd);border-radius:12px;overflow:hidden;background:#fff;min-height:46px}
 .srch:focus-within{border-color:var(--gold)}
@@ -374,9 +374,10 @@ a.card:hover{border-color:var(--gold)}
 .hico .cnt{top:0;inset-inline-end:-2px}
 @media(max-width:899px){
  .hlogo{gap:6px}
- .hlogo svg{width:22px;height:22px}
- .hlogo b{font-size:15px}
- .hlogo .lf,.hlogo small{display:none}
+ .hlogo svg{width:27px;height:27px}
+ .hlogo b{font-size:16px}
+ .hlogo .lt{gap:3px}
+ .hlogo small{font-size:5.5px;letter-spacing:.14em}
  /* shorter hero + smaller section titles so products show on the first screen */
  .hslide{margin-bottom:14px}
  .hero2{min-height:118px;border-radius:14px}
@@ -389,8 +390,7 @@ a.card:hover{border-color:var(--gold)}
  .sec-h h2{font-size:15.5px}
  .sec-h a{font-size:12.5px}
 }
-.logo .ls{display:none}
-@media(max-width:899px){.hlogo .ls{display:inline}}
+
 .addr-line{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;font-weight:300;color:var(--goldl);width:100%;box-sizing:border-box;white-space:nowrap;overflow:hidden}
 .addr-line span{overflow:hidden;text-overflow:ellipsis}
 .addr-line b{font-weight:600;color:#fff}

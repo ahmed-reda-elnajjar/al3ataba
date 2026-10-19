@@ -53,6 +53,7 @@ export default function Admin() {
       </div>
       <Link className="btn blk" href="/admin/products/new"><i className="ph ph-plus" />إضافة منتج جديد</Link>
       <RefreshSite />
+      <CfCheck />
       <div className="menu">
         {MENU.map((x) => {
           const n = x.k ? (data as Record<string, number>)[x.k] : 0;
@@ -78,6 +79,36 @@ function RefreshSite() {
       <small className="sp mu">الزوار بيشوفوا نسخة محفوظة من المنتجات عشان نوفّر قراءات Firebase. تعديلاتك بتظهر لهم تلقائياً خلال حوالي 10 دقايق.</small>
       <button className="btn o sm2" onClick={go}><i className="ph ph-arrows-clockwise" />حدّث الموقع للزوار دلوقتي</button>
       {msg && <small className="ok">{msg}</small>}
+    </div>
+  );
+}
+
+/** One click: why does Cloudflare (free image redraw) reject the key? */
+function CfCheck() {
+  const { user } = useApp();
+  const [r, setR] = useState<{ ok: boolean; lines: string[]; fix: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (!user) return;
+    setBusy(true); setR(null);
+    try {
+      const res = await fetch("/api/admin/cf-check", { method: "POST", headers: { "x-firebase-token": await user.getIdToken() } });
+      const j = await res.json();
+      setR(j.lines ? j : { ok: false, lines: [], fix: j.error || "حصلت مشكلة" });
+    } catch { setR({ ok: false, lines: [], fix: "مقدرتش أوصل للسيرفر" }); } finally { setBusy(false); }
+  };
+  return (
+    <div className="card col" style={{ gap: 8 }}>
+      <div className="row wrap" style={{ gap: 10 }}>
+        <small className="sp mu">لو إعادة رسم الصور بتقول Cloudflare رافض، الزرار ده يقولك السبب بالظبط.</small>
+        <button className="btn o sm2" onClick={go} disabled={busy}><i className="ph ph-stethoscope" />{busy ? "جاري الفحص…" : "افحص مفتاح Cloudflare"}</button>
+      </div>
+      {r && (
+        <div className="col" style={{ gap: 3, fontSize: 13 }}>
+          {r.lines.map((l, i) => <span key={i}>{l}</span>)}
+          <b style={{ color: r.ok ? "#1e6b43" : "#b3261e" }}>{r.fix}</b>
+        </div>
+      )}
     </div>
   );
 }
