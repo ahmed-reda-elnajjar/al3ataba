@@ -10,6 +10,7 @@ import { fmt } from "@/lib/format";
 import type { Order } from "@/lib/types";
 
 const MENU = [
+  { href: "/admin/insights", t: "لوحة المتابعة والتحليل (الحسابات، المستخدمين، المشاكل، المستشار الذكي)", ic: "ph-chart-line-up", k: "" },
   { href: "/admin/merchants", t: "إدارة التجار", ic: "ph-users-three", k: "pendingMerchants" },
   { href: "/admin/products?f=pending", t: "إدارة المنتجات ومراجعة المستورد", ic: "ph-package", k: "pendingProducts" },
   { href: "/admin/orders", t: "الطلبات", ic: "ph-receipt", k: "newOrders" },

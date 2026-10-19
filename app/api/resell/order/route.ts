@@ -1,10 +1,9 @@
-/* A reseller places an order for their customer. Prices are computed HERE (never trusted from the browser):
- * our price for the quantity (+ live offers) + the reseller's commission per piece, + shipping for the governorate. */
+/* A reseller places an order for their customer. Prices are computed HERE (never trusted from the browser). */
 import { userFromToken } from "@/lib/serverAuth";
 import { addDocSA, getDocSA, listSA } from "@/lib/sa";
 import { registerCats } from "@/lib/cats";
 import { GOVERNORATES } from "@/lib/config";
-import { PHONE_RE, baseUnit, canResell, maxQty, minQty, money, normPhone, resellSettings, shipFor, type RCustomer, type RItem, type Reseller } from "@/lib/resell";
+import { PHONE_RE, baseUnit, canResell, defaultCommission, isRetail, maxQty, minQty, money, normPhone, resellSettings, shipFor, type RCustomer, type RItem, type Reseller } from "@/lib/resell";
 import type { Category, Product, Promo, Settings } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +28,9 @@ export async function POST(req: Request) {
     if (!GOVERNORATES.includes(customer.governorate)) return bad("اختار المحافظة");
     if (customer.address.length < 8) return bad("اكتب العنوان بالتفصيل");
 
-    const raw: { productId: string; qty: number; commission: number }[] = Array.isArray(body.items) ? body.items : [];
+    const raw: { productId: string; qty: number; commission?: number | null }[] = Array.isArray(body.items) ? body.items : [];
     if (!raw.length || raw.length > 30) return bad("الطلب لازم يكون فيه من منتج لـ 30 منتج");
+    if (new Set(raw.map((r) => r.productId)).size !== raw.length) return bad("فيه منتج متكرر في الطلب");
 
     const [site, promos, cats] = await Promise.all([
       getDocSA<Settings>("settings/site"),
@@ -46,19 +46,19 @@ export async function POST(req: Request) {
       if (!p || !canResell(p)) return bad(`منتج مش متاح للبيع بالعمولة دلوقتي${p ? `: ${p.name}` : ""}`);
       const qty = Math.floor(Number(it.qty));
       if (!(qty >= minQty(p) && qty <= maxQty(p))) return bad(`الكمية في "${p.name}" لازم تكون من ${minQty(p)}${maxQty(p) < 10000 ? ` لـ ${maxQty(p)}` : ""}`);
-      const commission = Math.round(Number(it.commission));
-      if (!(commission >= 0 && commission <= 100000)) return bad(`العمولة في "${p.name}" مش صحيحة`);
-      const base = baseUnit(p, qty, promos);
+      const base = baseUnit(p, qty, promos, rs);
       if (!(base > 0)) return bad(`مفيش سعر للمنتج "${p.name}"`);
+      const commission = it.commission === null || it.commission === undefined || (it.commission as unknown) === "" ? defaultCommission(p, base, rs, cats) : Math.round(Number(it.commission));
+      if (!(commission >= 0 && commission <= 100000)) return bad(`العمولة في "${p.name}" مش صحيحة`);
       const img = (p.images || []).find((u) => typeof u === "string" && u.startsWith("http")) || "";
-      items.push({ productId: p.id, name: p.name, image: img, unit: p.unit || "قطعة", qty, base, commission, price: base + commission });
+      items.push({ productId: p.id, name: p.name, image: img, unit: p.unit || "قطعة", qty, retail: isRetail(p, qty), base, commission, price: base + commission });
     }
     const subtotal = money(items.reduce((a, i) => a + i.price * i.qty, 0));
     const commissionTotal = money(items.reduce((a, i) => a + i.commission * i.qty, 0));
     const shipping = shipFor(customer.governorate, rs);
     const now = Date.now();
     const id = await addDocSA("rorders", {
-      resellerId: user.uid, resellerName: me.name, customer, items, subtotal, shipping, total: money(subtotal + shipping), commissionTotal,
+      resellerId: user.uid, resellerName: me.name, resellerPhone: me.phone, customer, items, subtotal, shipping, total: money(subtotal + shipping), commissionTotal,
       status: "new", history: [{ status: "new", at: now }], deliveredAt: null, createdAt: new Date(now),
     });
     return Response.json({ id, total: money(subtotal + shipping), commissionTotal });

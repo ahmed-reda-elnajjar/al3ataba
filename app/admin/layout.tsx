@@ -4,6 +4,7 @@ import { RequireAdmin } from "@/components/Guard";
 
 const links = [
   { href: "/admin", t: "نظرة عامة", ic: "ph-chart-bar" },
+  { href: "/admin/insights", t: "لوحة المتابعة والتحليل", ic: "ph-chart-line-up" },
   { href: "/admin/products", t: "المنتجات", ic: "ph-package" },
   { href: "/admin/categories", t: "الأقسام", ic: "ph-squares-four" },
   { href: "/admin/promos", t: "العروض والخصومات", ic: "ph-tag" },
