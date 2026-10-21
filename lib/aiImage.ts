@@ -36,12 +36,12 @@ async function cloudflare(b64: string, prompt: string, fails: string[], small?: 
     let img: Blob;
     if (small) { const r = await fetch(small); if (!r.ok) throw new Error(`صورة ${r.status}`); img = await r.blob(); }
     else img = new Blob([Buffer.from(b64, "base64")], { type: "image/jpeg" });
-    const run = (id: string) => {
+    const run = (id: string, text = prompt, m = model) => {
       const form = new FormData();
-      form.append("prompt", prompt.slice(0, 2000));
+      form.append("prompt", text.slice(0, 2000));
       form.append("input_image_0", img, "product.jpg");
       form.append("width", "1024"); form.append("height", "1024");
-      return fetch(`https://api.cloudflare.com/client/v4/accounts/${id}/ai/run/${model}`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form });
+      return fetch(`https://api.cloudflare.com/client/v4/accounts/${id}/ai/run/${m}`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form });
     };
     // try the cached/known account first; if the token can't reach it, try every account the token owns
     const tried = new Set<string>();
@@ -60,7 +60,20 @@ async function cloudflare(b64: string, prompt: string, fails: string[], small?: 
       if (r || round > 0) break;
       queue.push(...(await cfAccounts(key)).map((a) => a.id));
     }
-    if (!r) { fails.push(`Cloudflare: ${(acc ? lastErr : lastErr || "CF_ACCOUNT_ID مش مظبوط").slice(0, 90)}`); return null; }
+    // the safety filter sometimes flags normal products (cartoon prints, brand logos…) → retry with a short neutral prompt, then the bigger model
+    if (!r && /flag/i.test(lastErr) && (cfGoodAcc || acc)) {
+      const id = cfGoodAcc || acc;
+      const plain = "Clean professional e-commerce product photo of exactly this product, keep the same product, colors, shape, packaging and printed text, centered on a pure white background, soft studio lighting.";
+      const tries: [string, string][] = [[plain, model], [plain, "@cf/black-forest-labs/flux-2-klein-9b"]];
+      for (const [t, m] of tries) {
+        const res = await run(id, t, m);
+        if (res.ok) { r = res; break; }
+        const j = await res.json().catch(() => ({}));
+        lastErr = String(j?.errors?.[0]?.message || res.status);
+      }
+      if (!r && /flag/i.test(lastErr)) lastErr = "فلتر الأمان عند Cloudflare رفض الصورة دي (بيحصل مع رسومات الكرتون واللوجوهات) — جرّب «اكتب وصف…» أو صورة تانية";
+    }
+    if (!r) { fails.push(`Cloudflare: ${(acc ? lastErr : lastErr || "CF_ACCOUNT_ID مش مظبوط").slice(0, 120)}`); return null; }
     const ct = r.headers.get("content-type") || "";
     if (ct.startsWith("image/")) return { dataUrl: `data:${ct};base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}`, by: "Cloudflare (مجاني)" };
     const j = await r.json().catch(() => ({}));
