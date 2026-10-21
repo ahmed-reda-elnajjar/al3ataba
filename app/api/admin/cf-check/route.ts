@@ -34,7 +34,10 @@ export async function POST(req: Request) {
     const list = await cfAccounts(key);
     const good: string[] = [];
     for (const a of list) { if ((await cf(`/accounts/${a.id}/ai/models/search?per_page=1`, key)).ok) good.push(`${a.name || "حساب"} (${a.id})`); }
-    lines.push(`الحسابات اللي التوكن شايفها: ${list.length ? list.map((a) => `${a.name || "حساب"} …${a.id.slice(-4)}`).join("، ") : "مقدرتش أجيبها"}`);
+    const raw = list.length ? null : await cf("/accounts?per_page=50", key);
+    lines.push(`الحسابات اللي التوكن شايفها: ${list.length ? list.map((a) => `${a.name || "حساب"} …${a.id.slice(-4)}`).join("، ") : `مقدرتش أجيبها (${raw?.status} ${raw?.msg || ""})`}`);
+    const vid = (user.ok ? user.result : account?.result)?.id;
+    if (vid) lines.push(`رقم التوكن اللي في Vercel: …${String(vid).slice(-6)}`);
     if (good.length) return Response.json({ ok: true, lines, fix: `الـ CF_ACCOUNT_ID اللي في Vercel غلط، بس الموقع هيستخدم الحساب الصح لوحده ✓ — جرّب إعادة الرسم دلوقتي. ولو عايز تصلّحه: حط في CF_ACCOUNT_ID ده: ${good[0]}` });
     return Response.json({ ok: false, lines, fix: "التوكن مش واصل لـ Workers AI على أي حساب. اتأكد إن الصلاحيات Workers AI (Read + Edit) واتعمل Update token." });
   }
