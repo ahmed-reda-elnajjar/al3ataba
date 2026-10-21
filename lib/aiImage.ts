@@ -10,26 +10,58 @@ export type Redraw = { dataUrl: string; by: string };
 
 /** Cloudflare Workers AI — FLUX.2 [klein] image editing. FREE daily allowance (10,000 neurons/day) on any Cloudflare account.
  *  Env: CF_ACCOUNT_ID + CF_API_TOKEN (token with "Workers AI" permission). Input must be under 512×512 → we fetch a 500px copy. */
-async function cloudflare(b64: string, prompt: string, fails: string[], small?: string) {
-  // tolerate pasted extras: a whole curl line / "Bearer …" for the token, a dashboard URL for the account id
+/** Account ids this Cloudflare token can reach (used when CF_ACCOUNT_ID is wrong or missing). */
+export async function cfAccounts(key: string): Promise<{ id: string; name: string }[]> {
+  try {
+    const r = await fetch("https://api.cloudflare.com/client/v4/accounts?per_page=50", { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" });
+    const j = await r.json().catch(() => ({}));
+    return Array.isArray(j?.result) ? j.result.map((a: { id: string; name: string }) => ({ id: String(a.id), name: String(a.name || "") })) : [];
+  } catch { return []; }
+}
+export function cfEnv() {
   const rawKey = process.env.CF_API_TOKEN || "", rawAcc = process.env.CF_ACCOUNT_ID || "";
   const key = (rawKey.match(/cfut_[A-Za-z0-9_-]+/) || rawKey.replace(/^.*Bearer\s+/i, "").match(/[A-Za-z0-9_-]{30,}/) || [""])[0];
   const acc = (rawAcc.match(/[a-f0-9]{32}/i) || [""])[0];
+  return { rawKey, rawAcc, key, acc };
+}
+let cfGoodAcc = ""; // the account id that actually worked (cached per server instance)
+
+async function cloudflare(b64: string, prompt: string, fails: string[], small?: string) {
+  // tolerate pasted extras: a whole curl line / "Bearer …" for the token, a dashboard URL for the account id
+  const { rawKey, rawAcc, key, acc } = cfEnv();
   if (!rawAcc && !rawKey) return null;
-  if (!acc) { fails.push("Cloudflare: CF_ACCOUNT_ID مش مظبوط (لازم 32 حرف ورقم)"); return null; }
   if (!key) { fails.push("Cloudflare: CF_API_TOKEN مش مظبوط"); return null; }
   const model = process.env.CF_IMAGE_MODEL || "@cf/black-forest-labs/flux-2-klein-4b";
   try {
     let img: Blob;
     if (small) { const r = await fetch(small); if (!r.ok) throw new Error(`صورة ${r.status}`); img = await r.blob(); }
     else img = new Blob([Buffer.from(b64, "base64")], { type: "image/jpeg" });
-    const form = new FormData();
-    form.append("prompt", prompt.slice(0, 2000));
-    form.append("input_image_0", img, "product.jpg");
-    form.append("width", "1024"); form.append("height", "1024");
-    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/ai/run/${model}`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form });
+    const run = (id: string) => {
+      const form = new FormData();
+      form.append("prompt", prompt.slice(0, 2000));
+      form.append("input_image_0", img, "product.jpg");
+      form.append("width", "1024"); form.append("height", "1024");
+      return fetch(`https://api.cloudflare.com/client/v4/accounts/${id}/ai/run/${model}`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form });
+    };
+    // try the cached/known account first; if the token can't reach it, try every account the token owns
+    const tried = new Set<string>();
+    let r: Response | null = null, lastErr = "";
+    const queue = [cfGoodAcc, acc].filter(Boolean);
+    for (let round = 0; round < 2; round++) {
+      for (const id of queue) {
+        if (tried.has(id)) continue;
+        tried.add(id);
+        const res = await run(id);
+        if (res.ok) { r = res; cfGoodAcc = id; break; }
+        const j = await res.json().catch(() => ({}));
+        lastErr = String(j?.errors?.[0]?.message || res.status);
+        if (!(res.status === 401 || res.status === 403 || /auth/i.test(lastErr))) { round = 2; break; } // a real model error — don't hop accounts
+      }
+      if (r || round > 0) break;
+      queue.push(...(await cfAccounts(key)).map((a) => a.id));
+    }
+    if (!r) { fails.push(`Cloudflare: ${(acc ? lastErr : lastErr || "CF_ACCOUNT_ID مش مظبوط").slice(0, 90)}`); return null; }
     const ct = r.headers.get("content-type") || "";
-    if (!r.ok) { const j = await r.json().catch(() => ({})); fails.push(`Cloudflare: ${String(j?.errors?.[0]?.message || r.status).slice(0, 90)}`); return null; }
     if (ct.startsWith("image/")) return { dataUrl: `data:${ct};base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}`, by: "Cloudflare (مجاني)" };
     const j = await r.json().catch(() => ({}));
     const out = j?.result?.image || j?.image;
