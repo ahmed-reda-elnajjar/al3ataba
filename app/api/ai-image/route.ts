@@ -7,9 +7,10 @@
 import { isAdminToken } from "@/lib/serverAuth";
 import { sized } from "@/lib/media";
 import { redraw } from "@/lib/aiImage";
+import { aiGenerate } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 const CLD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD || "dvefx5ts8";
 const PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_PRESET || "hh3sejta";
@@ -26,10 +27,11 @@ const READ_PROMPT = `دي صورة منتج من متجر جملة. اقرأ أ�
 - "subject": وصف إنجليزي قصير (من 2 لـ 5 كلمات) للمنتج كقطعة واحدة زي ما هو ظاهر، من غير الخلفية والرسومات. لو المنتج ظاهر جوه علبته أو العلبة هي الأساس اكتب العلبة (مثال: "retail box with cable"، "wired earphones retail box"، "black over-ear headphones"، "portable bluetooth speaker").
 - "boxed": true لو المنتج الأساسي ظاهر جوه علبة أو العلبة واضحة جنبه، وإلا false.
 - "parts": كلمات إنجليزي للقطع الحقيقية للمنتج نفسه من غير العلبة (مثال: ["headphones"] أو ["cable","usb plug","connector"]).
+- "color": لون المنتج الحقيقي نفسه بالإنجليزي (مثال: "white"، "black"، "white with silver"، "pink") — لون المنتج مش العلبة.
 - "hand": true لو فيه إيد أو صباع أو جزء من شخص ماسك المنتج أو مغطي جزء منه، وإلا false.
-رجّع JSON فقط: {"hasText": true/false, "specs": [{"k":"...","v":"..."}], "subject": "...", "boxed": true/false, "parts": ["..."], "hand": true/false}`;
+رجّع JSON فقط: {"hasText": true/false, "specs": [{"k":"...","v":"..."}], "subject": "...", "boxed": true/false, "parts": ["..."], "color": "...", "hand": true/false}`;
 
-type Read = { hasText: boolean; specs: Spec[]; parts: string[]; subject: string; boxed: boolean; hand: boolean };
+type Read = { hasText: boolean; specs: Spec[]; parts: string[]; subject: string; boxed: boolean; hand: boolean; color?: string };
 const clean = (x: unknown) => String(x || "").toLowerCase().replace(/[^a-z0-9 -]/g, " ").replace(/\s+/g, " ").trim();
 function parseSpecs(t: string): Read {
   try {
@@ -37,7 +39,7 @@ function parseSpecs(t: string): Read {
     const j = JSON.parse(m ? m[0] : t);
     const specs = (Array.isArray(j.specs) ? j.specs : []).filter((s: Spec) => s && s.k && s.v).map((s: Spec) => ({ k: String(s.k).trim().slice(0, 40), v: String(s.v).trim().slice(0, 120) })).slice(0, 12);
     const parts = (Array.isArray(j.parts) ? j.parts : []).map(clean).filter(Boolean).slice(0, 4);
-    return { hasText: !!j.hasText || specs.length > 0, specs, parts, subject: clean(j.subject).split(" ").slice(0, 6).join(" "), boxed: !!j.boxed, hand: !!j.hand };
+    return { hasText: !!j.hasText || specs.length > 0, specs, parts, subject: clean(j.subject).split(" ").slice(0, 6).join(" "), boxed: !!j.boxed, hand: !!j.hand, color: clean(j.color).slice(0, 40) };
   } catch { return { hasText: false, specs: [], parts: [], subject: "", boxed: false, hand: false }; }
 }
 
@@ -72,7 +74,6 @@ async function readText(b64: string): Promise<Read & { by: string }> {
 /* ---------- 2a) AI redraw (Meta / Gemini / OpenRouter / Grok) ---------- */
 // how a realistic catalogue photo of each kind of product should look
 const LOOK: [RegExp, string][] = [
-  [/كابل|وصلة|وصله|cable|usb|lightning|type.?c|micro/i, "It is a charging/data cable: show the WHOLE cable neatly coiled in a loose round loop (like a real product photo, the coil size suggesting its real length), with BOTH connector ends placed in front of the coil, facing the camera, so each connector's shape (USB-A, Type-C, Lightning, Micro-USB…) is clearly readable. Keep the cable's exact colour, material (braided or smooth) and connector housings."],
   [/شاحن|راس|رأس|charger|adapter|adaptor|wall/i, "It is a charger: show the charger head from the front with its output ports (USB-A / USB-C) clearly visible and the plug prongs visible; if a cable comes with it, show the cable neatly coiled next to the head with its connector end visible."],
   [/باور|power ?bank/i, "It is a power bank: show its front face straight on, with the display/LEDs and the input/output ports clearly visible (slightly show the port edge if needed). Keep its exact colour, finish and printed capacity."],
   [/ايربود|ايربودز|earbud|air ?pod|tws/i, "It is a pair of wireless earbuds: show the charging case open, front view, with both earbuds placed in front of it."],
@@ -81,15 +82,17 @@ const LOOK: [RegExp, string][] = [
   [/ساع|watch/i, "It is a smart watch: show the watch face straight on with the strap closed in a loop behind it, screen on."],
   [/جراب|كفر|case|cover/i, "It is a phone case: show the back of the case straight on with the camera cut-out visible."],
   [/سبيكر|صب|speaker/i, "It is a speaker: show its front grille straight on with the control buttons visible."],
+  [/كابل|وصلة|وصله|cable|usb|lightning|type.?c|micro/i, "It is a charging/data cable: show the WHOLE cable neatly coiled in a loose round loop (like a real product photo, the coil size suggesting its real length), with BOTH connector ends placed in front of the coil, facing the camera, so each connector's shape (USB-A, Type-C, Lightning, Micro-USB…) is clearly readable. Keep the cable's exact colour, material (braided or smooth) and connector housings."],
 ];
 
-function buildPrompt(read: Read, name: string, variant: string, extra: string) {
-  const hay = `${name} ${read.subject} ${read.parts.join(" ")}`;
-  const look = LOOK.find(([re]) => re.test(hay))?.[1] || "Show the complete product, every part of it visible.";
+function buildPrompt(read: Read, name: string, variant: string, extra: string, known = "") {
+  const look = LOOK.find(([re]) => re.test(name))?.[1] || LOOK.find(([re]) => re.test(`${read.subject} ${read.parts.join(" ")}`))?.[1] || "Show the complete product, every part of it visible.";
   const facts = read.specs.slice(0, 10).map((s) => `${s.k}: ${s.v}`).join("; ");
   return [
-    "Turn this photo into a realistic, premium e-commerce catalogue photo of the SAME product.",
+    "Edit the reference image: keep EXACTLY the same product that is in it (same item type, same colour, same shape, same brand) and turn it into a realistic premium e-commerce catalogue photo. Never replace it with a different kind of product.",
     `Product: ${name}${read.subject ? ` (${read.subject})` : ""}.`,
+    read.color ? `Its real colour is ${read.color} — keep this colour exactly.` : "",
+    known ? `Verified details about this exact product (from its listing / web research — match them): ${known}` : "",
     facts ? `Facts read from its packaging (use them to get the product right, do not print them as text): ${facts}.` : "",
     "First study the photo carefully and infer every real detail of the product: shape, colours, materials, connectors/ports, buttons, logos physically printed on it, length/size.",
     look,
@@ -101,6 +104,25 @@ function buildPrompt(read: Read, name: string, variant: string, extra: string) {
     extra ? `Extra instructions from the shop owner (follow them; they may be in Arabic): ${extra}` : "",
     "Output only the final image.",
   ].filter(Boolean).join("\n");
+}
+
+/** Quick web lookup: what does this exact product physically look like? (English, short) — cached per name. */
+const lookCache = new Map<string, string>();
+async function webLook(name: string, info: string): Promise<string> {
+  const k = name.trim().toLowerCase();
+  if (!k) return "";
+  if (lookCache.has(k)) return lookCache.get(k)!;
+  const q = `Search the web for this exact product and describe ONLY how the physical product looks, for a photographer who must draw it accurately.
+Product: ${name}
+Known info: ${info.slice(0, 500)}
+Answer JSON only: {"look":"one English paragraph, max 60 words: product type, exact colour(s), shape, materials, connectors/ports/buttons, what parts it has (e.g. earbuds + inline mic + 3.5mm plug). No marketing."}`;
+  const parse = (t: string) => { try { const m = t.match(/\{[\s\S]*\}/); const j = JSON.parse(m ? m[0] : t); return j.look ? [String(j.look).slice(0, 500)] : []; } catch { return []; } };
+  try {
+    const r = await Promise.race([aiGenerate(q, parse, undefined, true), new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000))]);
+    const look = r.out[0] || "";
+    if (look) lookCache.set(k, look);
+    return look;
+  } catch { return ""; }
 }
 
 async function geminiImage(b64: string, prompt: string, small?: string): Promise<{ data: string; by: string } | { error: string }> {
@@ -154,15 +176,17 @@ async function upload(file: string) {
 
 export async function POST(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const { url, mode, name, variant, prompt, bg, hand } = (await req.json()) as { url: string; mode?: "gemini" | "extract"; name?: string; variant?: "auto" | "product" | "boxed"; prompt?: string; bg?: "white" | "studio"; hand?: boolean };
+  const { url, mode, name, variant, prompt, bg, hand, info, web } = (await req.json()) as { url: string; mode?: "gemini" | "extract"; name?: string; variant?: "auto" | "product" | "boxed"; prompt?: string; bg?: "white" | "studio"; hand?: boolean; info?: string; web?: boolean };
   if (!url || !url.includes("res.cloudinary.com")) return Response.json({ error: "الصورة لازم تكون على Cloudinary" }, { status: 400 });
   try {
     const img = await fetch(sized(url, 1024).replace("f_auto", "f_jpg"));
     if (!img.ok) throw err(`مقدرتش أفتح الصورة (${img.status})`);
     const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
     // redraw needs what's written on the product first, so it can draw the right connectors/ports
-    const read = await readText(b64);
-    const gen = mode === "gemini" ? await geminiImage(b64, buildPrompt(read, name || "", variant || "auto", clean(prompt)), sized(url, 500).replace("w_500,c_limit", "w_500,h_500,c_limit").replace("f_auto", "f_jpg")) : null;
+    // read the picture and (for redraw) look the product up on the web at the same time
+    const [read, look] = await Promise.all([readText(b64), mode === "gemini" && web !== false ? webLook(name || "", String(info || "")) : Promise.resolve("")]);
+    const known = [look, String(info || "").replace(/\s+/g, " ").slice(0, 500)].filter(Boolean).join(" | ");
+    const gen = mode === "gemini" ? await geminiImage(b64, buildPrompt(read, name || "", variant || "auto", clean(prompt), known), sized(url, 500).replace("w_500,c_limit", "w_500,h_500,c_limit").replace("f_auto", "f_jpg")) : null;
     let image = "", method = "";
     if (gen && "data" in gen) {
       image = await upload(gen.data); method = "ai";

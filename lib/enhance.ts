@@ -175,8 +175,10 @@ export async function restoreImagesMany(list: Product[], onDone?: (n: number) =>
 
 /* ---------- AI studio photo (preview first, then approve) ---------- */
 export type StudioResult = { image: string; method: "ai" | "studio"; specs: { k: string; v: string }[]; hasText: boolean; cut?: string };
-export async function studioPreview(user: User, url: string, mode: "extract" | "gemini" = "extract", name = "", variant: "auto" | "product" | "boxed" = "auto", prompt = "", bg: "white" | "studio" = "white", hand?: boolean): Promise<StudioResult> {
-  const r = await fetch("/api/ai-image", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, mode, name, variant, prompt, bg, hand }) });
+export async function studioPreview(user: User, url: string, mode: "extract" | "gemini" = "extract", name = "", variant: "auto" | "product" | "boxed" = "auto", prompt = "", bg: "white" | "studio" = "white", hand?: boolean, p?: Product): Promise<StudioResult> {
+  // what we already know about the product (specs/colours/description — often web-researched) goes into the image prompt
+  const info = p ? [(p.specs || []).map((x) => `${x.k}: ${x.v}`).join("; "), p.colors?.length ? `الألوان: ${p.colors.join("، ")}` : "", String(p.description || "").slice(0, 400)].filter(Boolean).join("\n") : "";
+  const r = await fetch("/api/ai-image", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await user.getIdToken() }, body: JSON.stringify({ url, mode, name, variant, prompt, bg, hand, info, web: true }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j as StudioResult;

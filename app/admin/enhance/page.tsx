@@ -65,7 +65,7 @@ export default function EnhancePage() {
       while (queue.length && !stopRef.current) {
         const p = queue.shift()!;
         const src = p.imagesOrig?.[0] || p.images!.find((u) => !isStudio(u)) || p.images![0]; // always start from the original photo
-        try { const res = await studioPreview(user, src, mode, `${p.name} ${p.categoryName}`, "auto", "", bg); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
+        try { const res = await studioPreview(user, src, mode, `${p.name} ${p.categoryName}`, "auto", "", bg, undefined, p); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
         catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
       }
     };
@@ -76,7 +76,7 @@ export default function EnhancePage() {
     if (!user) return;
     const src = p.imagesOrig?.[0] || p.images!.find((u) => !isStudio(u)) || p.images![0];
     setPrev((o) => ({ ...o, [p.id]: { state: "busy" } }));
-    try { const res = await studioPreview(user, src, how, `${p.name} ${p.categoryName}`, variant, prompt, bg, hand); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
+    try { const res = await studioPreview(user, src, how, `${p.name} ${p.categoryName}`, variant, prompt, bg, hand, p); setPrev((o) => ({ ...o, [p.id]: { state: "ready", res } })); }
     catch (e) { setPrev((o) => ({ ...o, [p.id]: { state: "err", error: String((e as Error).message) } })); }
   };
   // free-text edits on a preview ("شيل الإيد", "كبّر المنتج", "خلي الخلفية رمادي فاتح"…), with undo
