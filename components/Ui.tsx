@@ -12,7 +12,7 @@ import { cartPromoFields } from "@/lib/promos";
 export function Img({ src, ic = "ph-image", ratio = 1, className = "", style, w = 600 }: { src?: string; ic?: string; ratio?: number; className?: string; style?: React.CSSProperties; w?: number }) {
   return (
     <div className={`img ${className}`} style={{ aspectRatio: String(ratio), ...style }}>
-      {src ? <img src={sized(src, w)} alt="" loading="lazy" decoding="async" /> : <i className={`ph ${ic}`} />}
+      {src ? <img src={sized(src, w)} alt="" loading="lazy" decoding="async" onError={(e) => { const el = e.currentTarget; if (!el.dataset.full && el.src !== src) { el.dataset.full = "1"; el.src = src; } else el.style.visibility = "hidden"; }} /> : <i className={`ph ${ic}`} />}
     </div>
   );
 }

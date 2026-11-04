@@ -249,6 +249,11 @@ export default function EnhancePage() {
                     {editing[p.id] && <small style={{ color: editing[p.id].startsWith("✗") ? "var(--err)" : undefined }}>{editing[p.id]}</small>}
                   </div>
                 )}
+                {pr.res?.method === "ai" && (pr.res.check
+                  ? <div className="alert" style={{ background: pr.res.check.ok ? "#e6f4ec" : "#fdecea", color: pr.res.check.ok ? "#1e6b43" : "#b3261e", padding: "6px 10px", fontSize: 13 }}>
+                      <b>{pr.res.check.ok ? `✓ مطابق للمنتج ${pr.res.check.score}%` : `✗ مش مطابق (${pr.res.check.score}%) — ماتعتمدهاش`}</b>{pr.res.check.issues ? ` · ${pr.res.check.issues}` : ""}
+                    </div>
+                  : <small className="mu">مقدرتش أتأكد من المطابقة — راجعها بعينك.</small>)}
                 {pr.res && pr.res.specs.length > 0 && <small><b>اتقري من الصورة:</b> {pr.res.specs.map((s) => `${s.k}: ${s.v}`).join(" · ")}</small>}
                 <div className="row g8">
                   {pr.state === "ready" && <><button className="btn sm2" onClick={() => approve(p)}><i className="ph ph-check" />اعتمد</button><button className="btn o sm2" onClick={() => reject(p.id)}>ارفض</button></>}

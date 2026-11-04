@@ -5,42 +5,24 @@ import { doc, updateDoc, writeBatch } from "firebase/firestore";
 import { touchCatalog } from "./catalogClient";
 import type { User } from "firebase/auth";
 import { dbI } from "./firebase";
-import { uploadFromUrl } from "./img";
 import type { Product } from "./types";
 
-const CLOUD = "res.cloudinary.com/dvefx5ts8/";
-// "clean": square on white + clearer + better quality, the picture itself is untouched (safe for designed/branded images)
-const CLEAN = "c_pad,w_1200,h_1200,b_rgb:FFFFFF/e_improve/e_sharpen:50/q_auto:best/f_jpg";
-// "cutout": also removes the background — only good for plain photos; it smears text/graphics on designed images
-const CUTOUT = "e_background_removal/" + CLEAN;
-export const isStudio = (u: string) => u.includes("/al3ataba/studio/");
-const isVideo = (u: string) => u.includes("/video/upload/");
+import { authI } from "./firebase";
 
-/** Cloudinary URL that renders the studio version of an uploaded image. */
-export function studioSource(url: string, cutout = false) {
-  return url.replace(/\/image\/upload\/(?:[^/]+\/)*?(v\d+\/)/, `/image/upload/${cutout ? CUTOUT : CLEAN}/$1`);
-}
+/* Studio photos are made on our own server (lib/imgServer.ts → white square, a little sharper/brighter)
+ * and stored on R2 under /i/studio/. Background removal was a Cloudinary-only feature and is gone with it;
+ * for a clean cut-out use the AI redraw in the studio page. */
+export const isStudio = (u: string) => u.includes("/al3ataba/studio/") || u.includes("/i/studio/");
+const isVideo = (u: string) => u.includes("/video/upload/") || /\/v\/[^?#]+\.(mp4|webm|mov)$/i.test(u);
 
-async function warm(url: string, tries = 4) {
-  for (let i = 0; i < tries; i++) {
-    try {
-      const r = await fetch(url, { cache: "no-store" });
-      if (r.ok && (r.headers.get("content-type") || "").startsWith("image/")) return;
-      if (r.status === 400 || r.status === 401 || r.status === 403) throw new Error(r.headers.get("x-cld-error") || `HTTP ${r.status}`);
-    } catch (e) { if (i === tries - 1) throw e; }
-    await new Promise((res) => setTimeout(res, 4000 * (i + 1)));
-  }
-  throw new Error("processing timeout");
-}
-
-/** One image → studio image stored as its own Cloudinary asset (so resizing later costs nothing extra). */
-export async function enhanceImage(url: string, cutout = false): Promise<string> {
+/** One image → studio image stored as its own file. `cutout` is ignored (no background removal any more). */
+export async function enhanceImage(url: string, _cutout = false): Promise<string> {
   if (!url || isStudio(url) || isVideo(url)) return url;
-  let src = url;
-  if (!src.includes(CLOUD) || !/\/v\d+\//.test(src)) src = await uploadFromUrl(src); // data: URLs, other hosts → copy to our cloud first
-  const s = studioSource(src, cutout);
-  await warm(s);                                 // first call does the heavy work (≈10–30s)
-  return uploadFromUrl(s, "al3ataba/studio");    // bake the result into a new image
+  const u = authI().currentUser; if (!u) throw new Error("لازم تسجّل دخول");
+  const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await u.getIdToken() }, body: JSON.stringify({ action: "studio", url }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.url) throw new Error(j.error || `HTTP ${r.status}`);
+  return String(j.url);
 }
 
 export type Opts = { images: "none" | "cover" | "all"; text: boolean; names: boolean; cutout?: boolean; web?: boolean };
@@ -174,7 +156,7 @@ export async function restoreImagesMany(list: Product[], onDone?: (n: number) =>
 }
 
 /* ---------- AI studio photo (preview first, then approve) ---------- */
-export type StudioResult = { image: string; method: "ai" | "studio"; specs: { k: string; v: string }[]; hasText: boolean; cut?: string };
+export type StudioResult = { image: string; method: "ai" | "studio"; specs: { k: string; v: string }[]; hasText: boolean; cut?: string; check?: { ok: boolean; score: number; issues: string; by: string } | null };
 export async function studioPreview(user: User, url: string, mode: "extract" | "gemini" = "extract", name = "", variant: "auto" | "product" | "boxed" = "auto", prompt = "", bg: "white" | "studio" = "white", hand?: boolean, p?: Product): Promise<StudioResult> {
   // what we already know about the product (specs/colours/description — often web-researched) goes into the image prompt
   const info = p ? [(p.specs || []).map((x) => `${x.k}: ${x.v}`).join("; "), p.colors?.length ? `الألوان: ${p.colors.join("، ")}` : "", String(p.description || "").slice(0, 400)].filter(Boolean).join("\n") : "";

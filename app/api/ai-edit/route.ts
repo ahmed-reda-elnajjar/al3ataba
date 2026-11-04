@@ -99,6 +99,7 @@ export async function POST(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
   const { url, instruction, engine, original } = (await req.json()) as { url: string; instruction: string; engine?: "auto" | "gemini"; original?: string };
   const instr = String(instruction || "").trim().slice(0, 500);
+  if (url && !url.includes("res.cloudinary.com")) return Response.json({ error: "التعديل بالكلام كان شغال على Cloudinary ومبقاش متاح — استخدم «إعادة الرسم بالذكاء الاصطناعي»" }, { status: 400 });
   if (!url?.includes("res.cloudinary.com") || !instr) return Response.json({ error: "اكتب التعديل المطلوب" }, { status: 400 });
   try {
     if (engine === "gemini") { const g = await geminiEdit(original && /أمام|زاوية|front|angle/i.test(instr) ? original : url, instr); return Response.json({ image: g.image, note: `اتعدلت بإعادة الرسم`, by: g.by }); }

@@ -53,6 +53,7 @@ export default function Admin() {
       </div>
       <Link className="btn blk" href="/admin/products/new"><i className="ph ph-plus" />إضافة منتج جديد</Link>
       <RefreshSite />
+      <RestoreImages />
       <CfCheck />
       <div className="menu">
         {MENU.map((x) => {
@@ -107,6 +108,45 @@ function CfCheck() {
         <div className="col" style={{ gap: 3, fontSize: 13 }}>
           {r.lines.map((l, i) => <span key={i}>{l}</span>)}
           <b style={{ color: r.ok ? "#1e6b43" : "#b3261e" }}>{r.fix}</b>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Rescue after Cloudinary was disabled: bring partner photos back onto our own storage (R2), batch by batch. */
+function RestoreImages() {
+  const { user } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState<string[]>([]);
+  const [manual, setManual] = useState<{ id: string; name: string }[]>([]);
+  const go = async () => {
+    if (!user) return;
+    setBusy(true); setLog(["بدأت…"]); setManual([]);
+    let total = 0;
+    try {
+      for (let round = 0; round < 80; round++) {
+        const res = await fetch("/api/admin/restore-images", { method: "POST", headers: { "x-firebase-token": await user.getIdToken() } });
+        const j = await res.json();
+        if (!res.ok) { setLog((l) => [...l, `✗ ${j.error || res.status}`]); break; }
+        total += j.done;
+        setManual(j.manual || []);
+        setLog((l) => [...l, `اتصلّح ${total} منتج — فاضل ${j.left}${j.failed?.length ? ` · مشاكل: ${j.failed.length}` : ""}`, ...(j.failed || []).map((f: string) => `  • ${f}`)]);
+        if (j.left <= 0) { setLog((l) => [...l, `✓ خلصنا${j.catsFixed ? ` · ${j.catsFixed} قسم أخد صورة جديدة` : ""}`]); break; }
+      }
+    } catch { setLog((l) => [...l, "✗ مقدرتش أوصل للسيرفر"]); } finally { setBusy(false); }
+  };
+  return (
+    <div className="card col" style={{ gap: 8 }}>
+      <div className="row wrap" style={{ gap: 10 }}>
+        <small className="sp mu">الصور القديمة كانت على Cloudinary واتقفل. الزرار ده بيرجّع صور منتجات المورّدين (الوزير…) من موقعهم ويحفظها عندنا.</small>
+        <button className="btn sm2" onClick={go} disabled={busy}><i className="ph ph-images" />{busy ? "جاري الترجيع…" : "رجّع الصور"}</button>
+      </div>
+      {!!log.length && <div className="col" style={{ gap: 2, fontSize: 13, maxHeight: 220, overflow: "auto" }}>{log.map((l, i) => <span key={i}>{l}</span>)}</div>}
+      {!!manual.length && (
+        <div className="col" style={{ gap: 2, fontSize: 13 }}>
+          <b>منتجات محتاجة ترفع صورها تاني بإيدك ({manual.length}):</b>
+          {manual.map((m) => <a key={m.id} href={`/admin/products/${m.id}`}>{m.name}</a>)}
         </div>
       )}
     </div>

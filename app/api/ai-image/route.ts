@@ -6,6 +6,8 @@
  * Nothing is saved here — the admin approves each result first. */
 import { isAdminToken } from "@/lib/serverAuth";
 import { sized } from "@/lib/media";
+import { fetchImage, storeImage } from "@/lib/imgServer";
+import sharp from "sharp";
 import { redraw } from "@/lib/aiImage";
 import { aiGenerate } from "@/lib/ai";
 
@@ -125,6 +127,44 @@ Answer JSON only: {"look":"one English paragraph, max 60 words: product type, ex
   } catch { return ""; }
 }
 
+/* ---------- 3) AI check: is the new picture 100% the same product? ---------- */
+type Check = { ok: boolean; score: number; issues: string; by: string };
+const CHECK_PROMPT = (name: string, known: string) => `You are a strict product-photo QA inspector for an online shop.
+Image 1 = the ORIGINAL real photo of the product. Image 2 = a NEW AI-generated catalogue photo.
+Product listing: ${name}
+Known specs/details: ${known.slice(0, 700)}
+Check that image 2 shows EXACTLY the same product as image 1 and as the listing: same product type (e.g. charger head is not a cable, earphones are not headphones), same colour(s), same shape/design, same connectors/ports/buttons, same number of parts, same brand marks physically on it, nothing important missing or invented. Ignore background, lighting, angle and the packaging box being removed.
+Answer JSON only: {"match": true/false, "score": 0-100, "issues": "short Arabic (Egyptian) list of every difference, empty if none"}`;
+function parseCheck(t: string, by: string): Check | null {
+  try { const m = t.match(/\{[\s\S]*\}/); const j = JSON.parse(m ? m[0] : t); const score = Math.max(0, Math.min(100, Number(j.score) || 0)); return { ok: !!j.match && score >= 85, score, issues: String(j.issues || "").slice(0, 300), by }; } catch { return null; }
+}
+async function checkSame(orig: string, gen: string, name: string, known: string): Promise<Check | null> {
+  const e = process.env, text = CHECK_PROMPT(name, known);
+  if (e.GROQ_API_KEY) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${e.GROQ_API_KEY}` },
+        body: JSON.stringify({ model: e.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct", temperature: 0, response_format: { type: "json_object" }, messages: [{ role: "user", content: [{ type: "text", text }, { type: "image_url", image_url: { url: orig } }, { type: "image_url", image_url: { url: gen } }] }] }),
+      });
+      const j = await r.json();
+      if (r.ok) { const c = parseCheck(String(j?.choices?.[0]?.message?.content || ""), "Groq"); if (c) return c; }
+    } catch { /* next */ }
+  }
+  if (e.GEMINI_API_KEY) {
+    try {
+      const b64 = async (u: string) => Buffer.from(await (await fetch(u)).arrayBuffer()).toString("base64");
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${e.GEMINI_MODEL || "gemini-flash-lite-latest"}:generateContent?key=${e.GEMINI_API_KEY}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text }, { inline_data: { mime_type: "image/jpeg", data: await b64(orig) } }, { inline_data: { mime_type: "image/jpeg", data: await b64(gen) } }] }], generationConfig: { temperature: 0, responseMimeType: "application/json" } }),
+      });
+      const j = await r.json();
+      if (r.ok) { const c = parseCheck(String(j?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || ""), "Gemini"); if (c) return c; }
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+const small = (u: string) => u.replace(/\/upload\/[^/]*\//, "/upload/c_limit,w_640,h_640/q_auto/f_jpg/");
+
 async function geminiImage(b64: string, prompt: string, small?: string): Promise<{ data: string; by: string } | { error: string }> {
   try { const r = await redraw(b64, prompt, small); return { data: r.dataUrl, by: r.by }; }
   catch (e) { return { error: String((e as Error).message) }; }
@@ -165,33 +205,47 @@ function compositeUrl(src: string, parts: string[], o: { bg: "white" | "studio";
   return `https://res.cloudinary.com/${CLD}/image/upload/c_scale,w_1200,h_1200/e_colorize:100,co_rgb:F3F0EA/l_${layer},c_scale,w_1200,h_520,e_colorize:100,co_rgb:F0DCC4/fl_layer_apply,g_south/${cut}/c_fit,w_900,h_800/e_shadow:35,x_0,y_16/fl_layer_apply,g_south,y_150/q_auto:best/f_jpg/${id}${ext}`;
 }
 
+/** Save an AI result (data: URL or link) on our storage (R2), both sizes. */
 async function upload(file: string) {
-  const body = new FormData();
-  body.append("file", file); body.append("upload_preset", PRESET); body.append("folder", "al3ataba/studio");
-  const r = await fetch(`https://api.cloudinary.com/v1_1/${CLD}/image/upload`, { method: "POST", body });
-  const j = await r.json();
-  if (!j.secure_url) throw err(j?.error?.message || "upload failed");
-  return String(j.secure_url).replace("/upload/", "/upload/f_auto,q_auto:best/");
+  try { return await storeImage(await fetchImage(file), "studio"); }
+  catch (e) { throw err(`حفظ الصورة فشل: ${String((e as Error)?.message || e)}`); }
+}
+/** Any stored picture → JPEG data URL of at most `px` (vision models and the redraw want JPEG). */
+async function jpeg(url: string, px: number) {
+  const buf = await sharp(await fetchImage(url), { failOn: "none" }).rotate().flatten({ background: "#ffffff" }).resize(px, px, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer();
+  return { b64: buf.toString("base64"), data: `data:image/jpeg;base64,${buf.toString("base64")}` };
 }
 
 export async function POST(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
   const { url, mode, name, variant, prompt, bg, hand, info, web } = (await req.json()) as { url: string; mode?: "gemini" | "extract"; name?: string; variant?: "auto" | "product" | "boxed"; prompt?: string; bg?: "white" | "studio"; hand?: boolean; info?: string; web?: boolean };
-  if (!url || !url.includes("res.cloudinary.com")) return Response.json({ error: "الصورة لازم تكون على Cloudinary" }, { status: 400 });
+  if (!url) return Response.json({ error: "مفيش صورة" }, { status: 400 });
+  if (mode !== "gemini") return Response.json({ error: "قص الخلفية كان خدمة من Cloudinary ومبقاش متاح — استخدم «إعادة الرسم بالذكاء الاصطناعي»" }, { status: 400 });
   try {
-    const img = await fetch(sized(url, 1024).replace("f_auto", "f_jpg"));
-    if (!img.ok) throw err(`مقدرتش أفتح الصورة (${img.status})`);
-    const b64 = Buffer.from(await img.arrayBuffer()).toString("base64");
+    const src = await jpeg(sized(url, 1600), 1024).catch((e) => { throw err(`مقدرتش أفتح الصورة: ${String((e as Error)?.message || e)}`); });
+    const b64 = src.b64;
+    const s500 = (await jpeg(sized(url, 1600), 500)).data, s640 = (await jpeg(sized(url, 1600), 640)).data;
     // redraw needs what's written on the product first, so it can draw the right connectors/ports
     // read the picture and (for redraw) look the product up on the web at the same time
     const [read, look] = await Promise.all([readText(b64), mode === "gemini" && web !== false ? webLook(name || "", String(info || "")) : Promise.resolve("")]);
     const known = [look, String(info || "").replace(/\s+/g, " ").slice(0, 500)].filter(Boolean).join(" | ");
-    const gen = mode === "gemini" ? await geminiImage(b64, buildPrompt(read, name || "", variant || "auto", clean(prompt), known), sized(url, 500).replace("w_500,c_limit", "w_500,h_500,c_limit").replace("f_auto", "f_jpg")) : null;
+    const gen = mode === "gemini" ? await geminiImage(b64, buildPrompt(read, name || "", variant || "auto", clean(prompt), known), s500) : null;
     let image = "", method = "";
+    let check: Check | null = null;
     if (gen && "data" in gen) {
       image = await upload(gen.data); method = "ai";
-      // Gemini returns ~1024px: upscale ×4 for a high-definition packshot (keeps the first file if it fails)
-      try { const up = image.replace("/upload/f_auto,q_auto:best/", "/upload/e_upscale/q_auto:best/f_jpg/"); if ((await fetch(up, { cache: "no-store" })).ok) image = await upload(up); } catch { /* keep */ }
+      // AI inspector compares the new picture with the original + the product details; one corrected retry if it's off
+      const origSmall = s640;
+      check = await checkSame(origSmall, (await jpeg(image, 640)).data, name || "", known);
+      if (check && !check.ok) {
+        const fix = `${buildPrompt(read, name || "", variant || "auto", clean(prompt), known)}\nIMPORTANT — a previous attempt was WRONG, fix these differences from the original product: ${check.issues}`;
+        const again = await geminiImage(b64, fix, s500);
+        if ("data" in again) {
+          const img2 = await upload(again.data);
+          const c2 = await checkSame(origSmall, (await jpeg(img2, 640)).data, name || "", known);
+          if (!c2 || c2.score >= check.score) { image = img2; check = c2 || check; }
+        }
+      }
     }
     else {
       if (mode === "gemini") throw err(`إعادة الرسم مش متاحة: ${gen && "error" in gen ? gen.error : ""}`, 400);
@@ -209,7 +263,7 @@ export async function POST(req: Request) {
       if (!ok) throw err(`Cloudinary: ${why}`);
       image = await upload(c); method = "studio";
     }
-    return Response.json({ image, method, specs: read.specs, hasText: read.hasText, readBy: read.by, cut: method === "studio" ? (clean(prompt) || (variant === "product" ? (read.parts.join(", ") || "") : variant === "boxed" ? "product + box" : read.subject)) : "" });
+    return Response.json({ image, method, check, specs: read.specs, hasText: read.hasText, readBy: read.by, cut: method === "studio" ? (clean(prompt) || (variant === "product" ? (read.parts.join(", ") || "") : variant === "boxed" ? "product + box" : read.subject)) : "" });
   } catch (e) {
     const x = e as Error & { status?: number };
     return Response.json({ error: String(x.message || e) }, { status: x.status || 500 });
