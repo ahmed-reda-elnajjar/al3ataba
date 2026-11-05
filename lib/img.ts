@@ -101,3 +101,49 @@ export const isVideoUrl = (u: string) => /\/video\/upload\//.test(u) || /\/v\/[^
 export const videoPoster = (url: string) => /\/video\/upload\//.test(url)
   ? url.replace("/upload/q_auto/", "/upload/so_0/").replace(/\.[a-z0-9]+$/i, ".jpg")
   : url.replace(/\.(mp4|webm|mov)(\?.*)?$/i, "_p.webp");
+
+/** The `n` sharpest, well-spaced frames of a local video as JPEG files (for products that only have a video). */
+export async function bestFrames(file: File, n = 2): Promise<File[]> {
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = URL.createObjectURL(file);
+  try {
+    await withTimeout(new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; }), 20000);
+    const dur = v.duration && isFinite(v.duration) ? v.duration : 1;
+    const W = v.videoWidth, H = v.videoHeight;
+    const big = document.createElement("canvas"); big.width = W; big.height = H;
+    const sm = document.createElement("canvas"); const sw = 160, sh = Math.max(1, Math.round((H / W) * 160)); sm.width = sw; sm.height = sh;
+    const bctx = big.getContext("2d")!, sctx = sm.getContext("2d", { willReadFrequently: true })!;
+    const seek = (t: number) => withTimeout(new Promise<void>((res) => { v.onseeked = () => res(); v.currentTime = t; }), 8000);
+    const shots: { t: number; score: number }[] = [];
+    const steps = Math.min(16, Math.max(6, Math.round(dur * 2)));
+    for (let i = 0; i < steps; i++) {
+      const t = Math.min(dur - 0.05, (dur * (i + 0.5)) / steps);
+      await seek(t);
+      sctx.drawImage(v, 0, 0, sw, sh);
+      const d = sctx.getImageData(0, 0, sw, sh).data;
+      // sharpness = variance of a simple Laplacian on the grey image (blurry/moving frames score low)
+      const g = new Float32Array(sw * sh);
+      for (let p = 0; p < sw * sh; p++) g[p] = 0.299 * d[p * 4] + 0.587 * d[p * 4 + 1] + 0.114 * d[p * 4 + 2];
+      let sum = 0, sum2 = 0, cnt = 0;
+      for (let y = 1; y < sh - 1; y++) for (let x = 1; x < sw - 1; x++) {
+        const k = y * sw + x, l = 4 * g[k] - g[k - 1] - g[k + 1] - g[k - sw] - g[k + sw];
+        sum += l; sum2 += l * l; cnt++;
+      }
+      shots.push({ t, score: sum2 / cnt - (sum / cnt) ** 2 });
+    }
+    const gap = Math.max(0.8, dur / (n * 2));
+    const pick: number[] = [];
+    for (const s of [...shots].sort((a, b) => b.score - a.score)) {
+      if (pick.every((t) => Math.abs(t - s.t) >= gap)) pick.push(s.t);
+      if (pick.length >= n) break;
+    }
+    const out: File[] = [];
+    for (const t of pick.sort((a, b) => a - b)) {
+      await seek(t);
+      bctx.drawImage(v, 0, 0, W, H);
+      const blob = await new Promise<Blob | null>((res) => big.toBlob((b) => res(b), "image/jpeg", 0.92));
+      if (blob) out.push(new File([blob], `frame-${Math.round(t * 10)}.jpg`, { type: "image/jpeg" }));
+    }
+    return out;
+  } catch { return []; } finally { URL.revokeObjectURL(v.src); }
+}

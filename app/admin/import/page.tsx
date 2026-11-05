@@ -3,18 +3,19 @@ import { useMemo, useState } from "react";
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
-import { enhanceMany } from "@/lib/enhance";
+import { applyStudio, enhanceMany, studioPreview } from "@/lib/enhance";
 import type { Product } from "@/lib/types";
 import { useAsync } from "@/lib/hooks";
 import { listApprovedMerchants, listCategories } from "@/lib/store";
-import { uploadImage } from "@/lib/img";
+import { bestFrames, uploadImage, uploadVideo } from "@/lib/img";
 import { HOUSE } from "@/lib/config";
 
-/* Imports products from a Telegram Desktop export (Export chat history → JSON, with photos). */
+/* Imports products from a Telegram Desktop export (Export chat history → JSON, with photos and videos).
+ * A product that only has a video gets its 2 sharpest frames as pictures, and the video itself is kept. */
 
 type TgText = string | { type?: string; text?: string };
-type TgMsg = { id: number; type: string; date?: string; date_unixtime?: string; text?: TgText | TgText[]; photo?: string; file?: string; mime_type?: string };
-type Row = { key: string; text: string; photos: string[]; name: string; price: string; moq: string; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
+type TgMsg = { id: number; type: string; date?: string; date_unixtime?: string; text?: TgText | TgText[]; photo?: string; file?: string; mime_type?: string; media_type?: string };
+type Row = { key: string; text: string; photos: string[]; videos: string[]; name: string; price: string; moq: string; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
 
 const UNITS = ["قطعة", "دستة", "كرتونة", "طقم", "علبة", "كيلو", "متر"];
 const plain = (t: TgMsg["text"]): string => (Array.isArray(t) ? t.map((x) => (typeof x === "string" ? x : x.text || "")).join("") : typeof t === "string" ? t : t?.text || "");
@@ -38,22 +39,26 @@ function guessName(text: string): string {
   return (lines[0] || "").replace(/^(اسم المنتج|المنتج|الاسم|الصنف|product)\s*[:：\-]\s*/i, "").slice(0, 90);
 }
 
+const MISSING = "(File not included";
 function toRows(msgs: TgMsg[]): Row[] {
-  const groups: { text: string; photos: string[]; t: number; id: number }[] = [];
+  const groups: { text: string; photos: string[]; videos: string[]; t: number; id: number }[] = [];
   for (const m of msgs) {
     if (m.type !== "message") continue;
     const photo = m.photo || (m.mime_type?.startsWith("image/") ? m.file : undefined);
+    const video = m.media_type === "video_file" || m.mime_type?.startsWith("video/") ? m.file : undefined;
+    const media = [photo, video].find((x) => x && !x.startsWith(MISSING));
     const text = plain(m.text).trim();
     const t = Number(m.date_unixtime) || (m.date ? Date.parse(m.date) / 1000 : 0);
     const last = groups[groups.length - 1];
     const close = last && Math.abs(t - last.t) <= 90;
-    if (photo && photo !== "(File not included. Change data exporting settings to download.)") {
-      if (close && (!text || !last.text)) { last.photos.push(photo); if (text) last.text = text; last.t = t; }
-      else groups.push({ text, photos: [photo], t, id: m.id });
+    if (media) {
+      const isVid = media === video;
+      if (close && (!text || !last.text)) { (isVid ? last.videos : last.photos).push(media); if (text) last.text = text; last.t = t; }
+      else groups.push({ text, photos: isVid ? [] : [media], videos: isVid ? [media] : [], t, id: m.id });
     } else if (text && close && !last.text) { last.text = text; }
   }
-  return groups.filter((g) => g.photos.length).map((g) => ({
-    key: String(g.id), text: g.text, photos: g.photos.slice(0, 8),
+  return groups.filter((g) => g.photos.length || g.videos.length).map((g) => ({
+    key: String(g.id), text: g.text, photos: g.photos.slice(0, 8), videos: g.videos.slice(0, 3),
     name: guessName(g.text), price: guessPrice(g.text), moq: guessMoq(g.text), on: true,
   }));
 }
@@ -72,6 +77,8 @@ export default function ImportTelegram() {
   const [running, setRunning] = useState(false);
   const [autoPolish, setAutoPolish] = useState(true); // studio photo + professional copy right after import
   const [polishMsg, setPolishMsg] = useState("");
+  const [aiCover, setAiCover] = useState(true); // white-background cover redrawn by AI, checked against the original
+  const [coverMsg, setCoverMsg] = useState("");
   const [done, setDone] = useState(0);
 
   const findFile = (path: string) => {
@@ -80,7 +87,7 @@ export default function ImportTelegram() {
   };
   const preview = useMemo(() => {
     const m = new Map<string, string>();
-    rows.slice(0, 400).forEach((r) => { const f = findFile(r.photos[0]); if (f) m.set(r.key, URL.createObjectURL(f)); });
+    rows.slice(0, 400).forEach((r) => { const f = r.photos[0] ? findFile(r.photos[0]) : undefined; if (f) m.set(r.key, URL.createObjectURL(f)); else { const v = r.videos[0] ? findFile(r.videos[0]) : undefined; if (v) m.set(r.key, URL.createObjectURL(v) + "#video"); } });
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows.length, files]);
@@ -128,13 +135,18 @@ export default function ImportTelegram() {
       if (!(price > 0) || r.name.trim().length < 2) { upd(r.key, { state: "err", note: "ناقص اسم أو سعر" }); continue; }
       upd(r.key, { state: "busy", note: "" });
       try {
-        const images: string[] = [];
+        const images: string[] = [], videos: string[] = [];
         for (const p of r.photos) { const f = findFile(p); if (f) images.push(await uploadImage(f, user.uid, "products")); }
+        for (const p of r.videos) {
+          const f = findFile(p); if (!f) continue;
+          if (images.length < 2) for (const fr of await bestFrames(f, images.length ? 1 : 2)) images.push(await uploadImage(fr, user.uid, "products"));
+          try { videos.push(await uploadVideo(f)); } catch { /* too big → pictures only */ }
+        }
         if (!images.length) throw new Error("no images");
         const name = r.name.trim();
         await addDoc(collection(dbI(), "products"), {
           name, description: r.text.trim(), categoryId: c.id, categoryName: c.name, unit, moq: q,
-          tiers: [{ min: q, price }], governorate: m.governorate || "القاهرة", images, colors: [], specs: [],
+          tiers: [{ min: q, price }], governorate: m.governorate || "القاهرة", images, media: [...images, ...videos], ...(videos.length ? { videos } : {}), colors: [], specs: [],
           cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "telegram", sourceId: r.key, createdAt: serverTimestamp(),
@@ -143,15 +155,29 @@ export default function ImportTelegram() {
       } catch { upd(r.key, { state: "err", note: images0(r) ? "فشل الحفظ" : "الصورة مش موجودة في المجلد" }); }
     }
     setRunning(false);
+    if (aiCover && newIds.length) {
+      let okN = 0, skipN = 0;
+      for (const [i, id] of newIds.entries()) {
+        setCoverMsg(`صورة بيضا بالذكاء الاصطناعي ${i + 1}/${newIds.length} · تمت ${okN} · اتسابت ${skipN}`);
+        try {
+          const d = await getDoc(doc(dbI(), "products", id)); if (!d.exists()) continue;
+          const p = { id, ...d.data() } as Product;
+          const res = await studioPreview(user, p.images[0], "gemini", p.name, "auto", "", "white", undefined, p);
+          if (res.check && !res.check.ok) { skipN++; continue; } // the AI changed the product → keep the real photos only
+          await applyStudio(p, res); okN++;
+        } catch { skipN++; }
+      }
+      setCoverMsg(`الصور البيضا خلصت ✓ تمت ${okN} · اتسابت ${skipN} (اللي اتسابت فاضلة بصورها الحقيقية)`);
+    }
     if (autoPolish && newIds.length) {
       setPolishMsg(`جاري تحسين صور وأوصاف ${newIds.length} منتج… سيب الصفحة مفتوحة`);
       const list = (await Promise.all(newIds.map((id) => getDoc(doc(dbI(), "products", id))))).filter((d) => d.exists()).map((d) => ({ id: d.id, ...d.data() }) as Product);
       let okN = 0, badN = 0;
-      await enhanceMany(user, list, { images: "cover", text: true, names: true }, (st) => { if (st.ok) okN++; else badN++; setPolishMsg(`جاري التحسين… نجح ${okN} · فشل ${badN}`); }, () => false);
+      await enhanceMany(user, list, { images: "none", text: true, names: true }, (st) => { if (st.ok) okN++; else badN++; setPolishMsg(`جاري التحسين… نجح ${okN} · فشل ${badN}`); }, () => false);
       setPolishMsg(`خلص التحسين ✓ نجح ${okN} · فشل ${badN} — راجع المنتجات وانشرها`);
     }
   };
-  const images0 = (r: Row) => r.photos.some((p) => findFile(p));
+  const images0 = (r: Row) => [...r.photos, ...r.videos].some((p) => findFile(p));
 
   return (
     <>
@@ -159,10 +185,10 @@ export default function ImportTelegram() {
         <h3>استيراد منتجات من تليجرام</h3>
         <ol className="mu" style={{ margin: 0, paddingInlineStart: 18, lineHeight: 1.9 }}>
           <li>افتح القناة في <b>Telegram Desktop</b> على الكمبيوتر، ومن (⋮) اختار <b>Export chat history</b>.</li>
-          <li>علّم على <b>Photos</b> بس، واختار Format: <b>Machine-readable JSON</b>، واضغط Export.</li>
+          <li>علّم على <b>Photos</b> و<b>Videos</b>، واختار Format: <b>Machine-readable JSON</b>، واضغط Export.</li>
           <li>اختار هنا المجلد اللي اتصدّر (اسمه غالباً ChatExport_…).</li>
         </ol>
-        <label className="drop"><i className="ph ph-folder-open" /><b style={{ color: "var(--pd)" }}>اختار مجلد التصدير</b><small>لازم يكون فيه result.json ومجلد photos</small>
+        <label className="drop"><i className="ph ph-folder-open" /><b style={{ color: "var(--pd)" }}>اختار مجلد التصدير</b><small>لازم يكون فيه result.json ومجلدات photos و video_files</small>
           {/* @ts-expect-error non-standard directory picker attributes */}
           <input type="file" hidden multiple webkitdirectory="" directory="" onChange={(e) => pick(e.target.files)} />
         </label>
@@ -179,7 +205,9 @@ export default function ImportTelegram() {
           </div>
           <div className="row wrap">
             <b className="sp">{rows.length} منتج اتلقى · {chosen.length} متعلّم · {done} اتضاف للمراجعة</b>
-              <label className="chk" title="شيل الخلفية + وصف احترافي بعد الاستيراد على طول"><input type="checkbox" checked={autoPolish} onChange={(e) => setAutoPolish(e.target.checked)} />حسّن الصور والوصف تلقائياً</label>
+              <label className="chk" title="اسم ووصف احترافي بعد الاستيراد على طول"><input type="checkbox" checked={autoPolish} onChange={(e) => setAutoPolish(e.target.checked)} />حسّن الاسم والوصف تلقائياً</label>
+              <label className="chk" title="صورة رئيسية للمنتج على خلفية بيضا، والذكاء الاصطناعي بيقارنها بالأصل قبل ما تتحط"><input type="checkbox" checked={aiCover} onChange={(e) => setAiCover(e.target.checked)} />صورة رئيسية بخلفية بيضا</label>
+              {coverMsg && <span className="ok" style={{ width: "100%" }}><i className="ph ph-image" /> {coverMsg}</span>}
               {polishMsg && <span className="ok" style={{ width: "100%" }}><i className="ph ph-magic-wand" /> {polishMsg}</span>}
               {done > 0 && !running && <a className="btn gd sm2" href="/admin/products?f=pending"><i className="ph ph-eye" />راجعهم وانشرهم</a>}
             <button className="btn o sm2" onClick={() => setRows((rs) => rs.map((r) => ({ ...r, on: true })))}>علّم الكل</button>
@@ -197,8 +225,10 @@ export default function ImportTelegram() {
           <div key={r.key} className="card row wrap" style={{ alignItems: "flex-start", opacity: r.on ? 1 : 0.55, borderColor: r.state === "ok" ? "var(--ok)" : r.state === "err" ? "var(--err)" : undefined }}>
             <input type="checkbox" checked={r.on} disabled={r.state === "ok"} onChange={(e) => upd(r.key, { on: e.target.checked })} style={{ width: 20, height: 20, accentColor: "var(--pa)", marginTop: 18 }} aria-label="اختيار" />
             <div style={{ position: "relative", flex: "none" }}>
-              {preview.get(r.key) ? <img src={preview.get(r.key)} alt="" className="ph-thumb" style={{ width: 76, height: 76 }} /> : <span className="ph-thumb" style={{ width: 76, height: 76, display: "grid", placeItems: "center" }}><i className="ph ph-image-broken" /></span>}
-              {r.photos.length > 1 && <span className="bd" style={{ position: "absolute", bottom: 4, insetInlineStart: 4 }}>{r.photos.length}</span>}
+              {preview.get(r.key)?.endsWith("#video") ? <video src={preview.get(r.key)!.replace(/#video$/, "")} muted playsInline preload="metadata" className="ph-thumb" style={{ width: 76, height: 76, objectFit: "cover" }} />
+                : preview.get(r.key) ? <img src={preview.get(r.key)} alt="" className="ph-thumb" style={{ width: 76, height: 76 }} /> : <span className="ph-thumb" style={{ width: 76, height: 76, display: "grid", placeItems: "center" }}><i className="ph ph-image-broken" /></span>}
+              {r.photos.length + r.videos.length > 1 && <span className="bd" style={{ position: "absolute", bottom: 4, insetInlineStart: 4 }}>{r.photos.length + r.videos.length}</span>}
+              {r.videos.length > 0 && <span className="bd v" style={{ position: "absolute", top: 4, insetInlineStart: 4 }}><i className="ph ph-video" /></span>}
             </div>
             <div className="sp col g8" style={{ minWidth: 220 }}>
               <input className="in" value={r.name} placeholder="اسم المنتج" onChange={(e) => upd(r.key, { name: e.target.value })} disabled={r.state === "ok"} />
