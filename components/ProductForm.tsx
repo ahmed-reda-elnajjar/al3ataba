@@ -9,7 +9,7 @@ import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
-import { isLowQuality, isVideoUrl, uploadFromUrl, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
+import { bestFrames, isLowQuality, isVideoUrl, uploadFromUrl, uploadImage, uploadVideo, videoPoster } from "@/lib/img";
 import { COLORS, swatch } from "@/lib/colors";
 import { useDragSort } from "@/lib/dnd";
 import { tiersFromMarkup, type MarkupTier } from "@/lib/pricing";
@@ -103,6 +103,11 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     for (const f of imgs) {
       setUpMsg(`جاري رفع الصور… ${++n}/${imgs.length + vids.length}`);
       try { const u = await uploadImage(f, user, "products"); setMedia((x) => [...x, u]); } catch { errs.push(`تعذّر رفع ${f.name}`); }
+    }
+    // a product with only a video: its 2 sharpest frames become the pictures (the video stays too)
+    if (!images.length && !imgs.length && vids[0]) {
+      setUpMsg("بطلّع أوضح صور من الفيديو…");
+      for (const fr of await bestFrames(vids[0], 2)) { try { const u = await uploadImage(fr, user, "products"); setMedia((x) => [...x, u]); } catch { /* skip */ } }
     }
     for (const f of vids) {
       setUpMsg(`جاري رفع الفيديو… ${++n}/${imgs.length + vids.length} (ممكن ياخد دقيقة)`);
