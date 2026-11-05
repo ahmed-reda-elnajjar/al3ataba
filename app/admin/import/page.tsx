@@ -6,7 +6,9 @@ import { useApp } from "@/lib/providers";
 import { applyStudio, enhanceMany, studioPreview } from "@/lib/enhance";
 import type { Product } from "@/lib/types";
 import { useAsync } from "@/lib/hooks";
-import { listApprovedMerchants, listCategories } from "@/lib/store";
+import { getSettings, listApprovedMerchants, listCategories } from "@/lib/store";
+import { DEFAULT_RULES, tiersFromRules } from "@/lib/pricing";
+import { createSupplier, listSuppliers } from "@/lib/suppliers";
 import { bestFrames, uploadImage, uploadVideo } from "@/lib/img";
 import { HOUSE } from "@/lib/config";
 
@@ -15,7 +17,10 @@ import { HOUSE } from "@/lib/config";
 
 type TgText = string | { type?: string; text?: string };
 type TgMsg = { id: number; type: string; date?: string; date_unixtime?: string; text?: TgText | TgText[]; photo?: string; file?: string; mime_type?: string; media_type?: string };
-type Row = { key: string; text: string; photos: string[]; videos: string[]; name: string; price: string; moq: string; on: boolean; state?: "ok" | "err" | "busy"; note?: string };
+type Row = { key: string; text: string; photos: string[]; videos: string[]; name: string; price: string; moq: string; on: boolean; state?: "ok" | "err" | "busy"; note?: string;
+  /* from al3ataba-import.json: category per product, supplier cost per piece, pieces per carton */
+  cat?: string; icon?: string; pack?: number; desc?: string };
+type Manifest = { format: string; supplier?: string; items: { key: string; name: string; description: string; category: string; icon?: string; cost: number; pack: number; photos: string[]; videos: string[] }[] };
 
 const UNITS = ["قطعة", "دستة", "كرتونة", "طقم", "علبة", "كيلو", "متر"];
 const plain = (t: TgMsg["text"]): string => (Array.isArray(t) ? t.map((x) => (typeof x === "string" ? x : x.text || "")).join("") : typeof t === "string" ? t : t?.text || "");
@@ -80,6 +85,7 @@ export default function ImportTelegram() {
   const [aiCover, setAiCover] = useState(true); // white-background cover redrawn by AI, checked against the original
   const [coverMsg, setCoverMsg] = useState("");
   const [done, setDone] = useState(0);
+  const [man, setMan] = useState<{ supplier: string } | null>(null); // folder has al3ataba-import.json (prepared list with categories + supplier prices)
 
   const findFile = (path: string) => {
     const name = path.split("/").pop() || path;
@@ -87,7 +93,7 @@ export default function ImportTelegram() {
   };
   const preview = useMemo(() => {
     const m = new Map<string, string>();
-    rows.slice(0, 400).forEach((r) => { const f = r.photos[0] ? findFile(r.photos[0]) : undefined; if (f) m.set(r.key, URL.createObjectURL(f)); else { const v = r.videos[0] ? findFile(r.videos[0]) : undefined; if (v) m.set(r.key, URL.createObjectURL(v) + "#video"); } });
+    rows.slice(0, 500).forEach((r) => { const f = r.photos[0] ? findFile(r.photos[0]) : undefined; if (f) m.set(r.key, URL.createObjectURL(f)); else { const v = r.videos[0] ? findFile(r.videos[0]) : undefined; if (v) m.set(r.key, URL.createObjectURL(v) + "#video"); } });
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows.length, files]);
@@ -96,11 +102,26 @@ export default function ImportTelegram() {
     setErr(""); setRows([]); setDone(0);
     if (!list?.length) return;
     const map = new Map<string, File>();
-    let json: File | undefined;
+    let json: File | undefined, prep: File | undefined;
     for (const f of Array.from(list)) {
       const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
       map.set(rel, f);
       if (/(^|\/)result\.json$/i.test(rel)) json = f;
+      if (/(^|\/)al3ataba-import\.json$/i.test(rel)) prep = f;
+    }
+    setMan(null);
+    if (prep) {
+      try {
+        const d = JSON.parse(await prep.text()) as Manifest;
+        let r: Row[] = d.items.map((x) => ({ key: x.key, text: x.description, desc: x.description, photos: x.photos, videos: x.videos, name: x.name, price: String(x.cost), moq: String(x.pack), on: true, cat: x.category, icon: x.icon, pack: x.pack }));
+        try {
+          const old = await getDocs(query(collection(dbI(), "products"), where("source", "==", "telegram")));
+          const seen = new Set(old.docs.map((x) => x.get("sourceId") as string));
+          r = r.map((x) => (seen.has(x.key) ? { ...x, on: false, state: "ok" as const, note: "" } : x));
+        } catch { /* best-effort */ }
+        setFiles(map); setRows(r); setMan({ supplier: d.supplier || "" }); setAiCover(false); setAutoPolish(false);
+        return;
+      } catch { return setErr("ملف al3ataba-import.json فيه مشكلة."); }
     }
     if (!json) return setErr("مش لاقي ملف result.json. اختار المجلد اللي Telegram صدّره (فيه result.json ومجلد photos).");
     try {
@@ -123,12 +144,30 @@ export default function ImportTelegram() {
 
   const run = async () => {
     if (!user) return;
-    const c = cats.data?.find((x) => x.id === cat);
-    if (!c) return setErr("اختار القسم الأول.");
+    const c0 = cats.data?.find((x) => x.id === cat);
+    if (!c0 && !man) return setErr("اختار القسم الأول.");
     const m = owner === HOUSE.id ? { id: HOUSE.id, name: HOUSE.name, governorate: "القاهرة" } : merchants.data?.find((x) => x.id === owner);
     if (!m) return setErr("اختار التاجر.");
     setErr(""); setRunning(true);
     const newIds: string[] = [];
+    // prepared list: supplier (admin-only), site markup rules, categories created when missing
+    let rules = DEFAULT_RULES, supplierId = "";
+    const catBy = new Map((cats.data ?? []).map((x) => [x.name.trim(), x]));
+    if (man) {
+      try { const st = await getSettings(); if (st.markupRules?.length) rules = st.markupRules; } catch { /* defaults */ }
+      if (man.supplier) {
+        try { const sp = (await listSuppliers()).find((x) => x.name.trim() === man.supplier.trim()) ?? (await createSupplier(man.supplier)); supplierId = sp.id; }
+        catch { setRunning(false); return setErr("مقدرتش أجيب/أعمل المورد."); }
+      }
+    }
+    const catFor = async (r: Row) => {
+      if (!man || !r.cat) return c0!;
+      if (r.cat.startsWith("id:")) { const f = cats.data?.find((x) => x.id === r.cat!.slice(3)); if (f) return f; }
+      const hit = catBy.get(r.cat.trim()); if (hit) return hit;
+      const ref = await addDoc(collection(dbI(), "categories"), { name: r.cat.trim(), icon: r.icon || "ph-package", order: 0, parentId: null });
+      const nc = { id: ref.id, name: r.cat.trim(), icon: r.icon || "ph-package", order: 0, parentId: null };
+      catBy.set(nc.name, nc); return nc;
+    };
     for (const r of chosen) {
       const price = Number(digits(r.price));
       const q = Math.max(1, Number(digits(r.moq || moq)) || 1);
@@ -144,9 +183,15 @@ export default function ImportTelegram() {
         }
         if (!images.length) throw new Error("no images");
         const name = r.name.trim();
+        const c = await catFor(r);
+        const pack = man && r.pack && r.pack > 1 ? r.pack : 0;
+        // supplier price per piece → selling tiers from the site rules; tier "1, 5…" means cartons when sold by the carton
+        const mt = pack ? (tiersFromRules(price, rules).rule?.tiers ?? []).map((t) => ({ min: Math.max(1, t.min) * pack, pct: t.pct })) : [];
+        const tiers = pack ? tiersFromRules(price, rules.map((x) => ({ ...x, tiers: x.tiers.map((t) => ({ min: Math.max(1, t.min) * pack, pct: t.pct })) }))).tiers : [{ min: q, price }];
+        const extra = man ? { basePrices: [price], markupTiers: mt, packSize: pack || null, ...(supplierId ? { supplierId } : {}) } : {};
         await addDoc(collection(dbI(), "products"), {
-          name, description: r.text.trim(), categoryId: c.id, categoryName: c.name, unit, moq: q,
-          tiers: [{ min: q, price }], governorate: m.governorate || "القاهرة", images, media: [...images, ...videos], ...(videos.length ? { videos } : {}), colors: [], specs: [],
+          name, description: (r.desc ?? r.text).trim(), categoryId: c.id, categoryName: c.name, unit: man ? "قطعة" : unit, moq: pack || q,
+          tiers, ...extra, governorate: m.governorate || "القاهرة", images, media: [...images, ...videos], ...(videos.length ? { videos } : {}), colors: [], specs: [],
           cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "telegram", sourceId: r.key, createdAt: serverTimestamp(),
@@ -198,7 +243,7 @@ export default function ImportTelegram() {
       {rows.length > 0 && (
         <div className="card col">
           <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 4 }}>
-            <div className="fld"><label>القسم (لكل المنتجات)</label><select className="in" value={cat} onChange={(e) => setCat(e.target.value)}><option value="">اختار…</option>{cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            {man ? <div className="fld"><label>القسم</label><div className="in" style={{ display: "flex", alignItems: "center" }}>حسب كل منتج · السعر بقواعد التسعير{man.supplier ? " · المورد محفوظ للإدارة" : ""}</div></div> : <div className="fld"><label>القسم (لكل المنتجات)</label><select className="in" value={cat} onChange={(e) => setCat(e.target.value)}><option value="">اختار…</option>{cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>}
             <div className="fld"><label>تنزل باسم</label><select className="in" value={owner} onChange={(e) => setOwner(e.target.value)}><option value={HOUSE.id}>العتبة (الإدارة)</option>{merchants.data?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
             <div className="fld"><label>الوحدة</label><select className="in" value={unit} onChange={(e) => setUnit(e.target.value)}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select></div>
             <div className="fld"><label>أقل كمية (لو مش مكتوبة)</label><input className="in" inputMode="numeric" value={moq} onChange={(e) => setMoq(e.target.value.replace(/\D/g, ""))} /></div>
@@ -221,7 +266,7 @@ export default function ImportTelegram() {
       {err && !rows.length && <div className="alert e">{err}</div>}
 
       <div className="col">
-        {rows.slice(0, 400).map((r) => (
+        {rows.slice(0, 500).map((r) => (
           <div key={r.key} className="card row wrap" style={{ alignItems: "flex-start", opacity: r.on ? 1 : 0.55, borderColor: r.state === "ok" ? "var(--ok)" : r.state === "err" ? "var(--err)" : undefined }}>
             <input type="checkbox" checked={r.on} disabled={r.state === "ok"} onChange={(e) => upd(r.key, { on: e.target.checked })} style={{ width: 20, height: 20, accentColor: "var(--pa)", marginTop: 18 }} aria-label="اختيار" />
             <div style={{ position: "relative", flex: "none" }}>
@@ -233,15 +278,16 @@ export default function ImportTelegram() {
             <div className="sp col g8" style={{ minWidth: 220 }}>
               <input className="in" value={r.name} placeholder="اسم المنتج" onChange={(e) => upd(r.key, { name: e.target.value })} disabled={r.state === "ok"} />
               <div className="row">
-                <input className="in" inputMode="decimal" value={r.price} placeholder="السعر ج.م" onChange={(e) => upd(r.key, { price: e.target.value })} disabled={r.state === "ok"} />
+                <input className="in" inputMode="decimal" value={r.price} placeholder={man ? "سعر القطعة من المورد" : "السعر ج.م"} title={man ? "سعر القطعة من المورد (البيع بيتحسب بقواعد التسعير)" : undefined} onChange={(e) => upd(r.key, { price: e.target.value })} disabled={r.state === "ok"} />
                 <input className="in" inputMode="numeric" value={r.moq} placeholder={`أقل كمية (${moq})`} onChange={(e) => upd(r.key, { moq: e.target.value })} disabled={r.state === "ok"} />
               </div>
+              {r.cat && <small className="mu"><i className="ph ph-tag" /> {r.cat.startsWith("id:") ? "إكسسوارات موبايل" : r.cat} · الكرتونة {r.pack} قطعة</small>}
               {r.text && <small style={{ whiteSpace: "pre-wrap", maxHeight: 64, overflow: "hidden" }}>{r.text}</small>}
             </div>
             {r.state === "ok" ? <span className="bd v">موجود على الموقع</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : null}
           </div>
         ))}
-        {rows.length > 400 && <div className="alert">بيظهر أول 400 بوست بس. استورد دول، وبعدين اختار المجلد تاني وشيل علامة اللي اتضافوا.</div>}
+        {rows.length > 500 && <div className="alert">بيظهر أول 500 بوست بس. استورد دول، وبعدين اختار المجلد تاني وشيل علامة اللي اتضافوا.</div>}
       </div>
     </>
   );
