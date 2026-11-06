@@ -59,6 +59,7 @@ export type Offer = {
 export type Settings = {
   shippingPerMerchant: number; whatsapp: string; supportPhone: string; paymentInstructions: string; announcement: string;
   heroTitle: string; heroSub: string; heroImage: string; city: string;
+  hideHomeCats?: boolean; // hide the "أقسام رئيسية" strip on the home page
   markupRules?: { from: number; tiers: { min: number; pct: number }[] }[];
   importSources?: { name: string; url: string; supplierId?: string }[];
   resell?: import("./resell").ResellSettings;

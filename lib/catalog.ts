@@ -101,7 +101,7 @@ async function buildFromFirebase(): Promise<Catalog> {
     products: prods.map((d) => slim(fromDoc<Product>(d))).sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)),
     categories: cats.map((d) => fromDoc<Category>(d)).map(({ id, name, icon, order, image, parentId }) => ({ id, name, icon, order, ...(image ? { image } : {}), ...(parentId ? { parentId } : {}) }) as Category).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     // public settings only (markup rules and supplier import links stay private)
-    settings: { shippingPerMerchant: s.shippingPerMerchant, whatsapp: s.whatsapp, supportPhone: s.supportPhone, paymentInstructions: s.paymentInstructions, announcement: s.announcement, heroTitle: s.heroTitle, heroSub: s.heroSub, heroImage: s.heroImage, city: s.city, resell: s.resell },
+    settings: { shippingPerMerchant: s.shippingPerMerchant, whatsapp: s.whatsapp, supportPhone: s.supportPhone, paymentInstructions: s.paymentInstructions, announcement: s.announcement, heroTitle: s.heroTitle, heroSub: s.heroSub, heroImage: s.heroImage, city: s.city, resell: s.resell, hideHomeCats: !!s.hideHomeCats },
     promos: promos.map((d) => { const x = fromDoc<Promo & { _updated?: string }>(d); delete x._updated; return x as Promo; }).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     merchants: merchants.map((d) => fromDoc<Merchant>(d)).map((m) => ({ id: m.id, name: m.name, type: m.type, governorate: m.governorate, city: m.city, about: short(m.about, 300), status: m.status, verified: !!m.verified, plan: m.plan, phone: "", ownerUid: "", createdAt: m.createdAt }) as Merchant),
   });

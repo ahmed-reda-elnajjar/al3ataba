@@ -29,6 +29,7 @@ export default function AdminSettings() {
         {s.heroImage ? <div className="row"><img src={s.heroImage} alt="" style={{ width: 180, borderRadius: 12 }} /><button className="btn r sm2" onClick={() => set("heroImage", "")}>شيل الصورة</button></div>
           : <label className="drop"><i className="ph ph-image" /><span>{up ? "جاري الرفع…" : "اضغط لرفع صورة البانر"}</span><input type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} /></label>}
       </div>
+      <label className="chk"><input type="checkbox" checked={!!s.hideHomeCats} onChange={(e) => set("hideHomeCats", e.target.checked)} />إخفاء "أقسام رئيسية" من الصفحة الرئيسية</label>
       <div className="fld"><label>المدينة اللي بتظهر في الهيدر على الموبايل</label><input className="in" value={s.city} onChange={(e) => set("city", e.target.value)} /></div>
       <hr style={{ border: 0, borderTop: "1px solid var(--bd)", width: "100%" }} />
       <div className="fld"><label>شريط إعلان أعلى الموقع (اتركه فاضي لإخفائه)</label><input className="in" value={s.announcement} onChange={(e) => set("announcement", e.target.value)} /></div>

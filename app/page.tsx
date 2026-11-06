@@ -5,7 +5,7 @@ import Link from "next/link";
 import { st } from "@/lib/style";
 import { useAsync } from "@/lib/hooks";
 import { useApp } from "@/lib/providers";
-import { listApprovedMerchants, listCategories, newArrivalsMixed, pageActiveProducts, type Cursor } from "@/lib/store";
+import { getSettings, listApprovedMerchants, listCategories, newArrivalsMixed, pageActiveProducts, type Cursor } from "@/lib/store";
 import type { Product } from "@/lib/types";
 import { Empty, Img, Loading, ProductCard } from "@/components/Ui";
 import { Recommended } from "@/components/Recommend";
@@ -17,9 +17,9 @@ const EMPTY: never[] = [];
 export default function Home() {
   const { isAdmin } = useApp();
   const { data, loading } = useAsync(async () => {
-    const [cats, merchants] = await Promise.all([listCategories(), listApprovedMerchants().catch(() => [])]);
+    const [cats, merchants, settings] = await Promise.all([listCategories(), listApprovedMerchants().catch(() => []), getSettings().catch(() => null)]);
     const products = await newArrivalsMixed(10, cats.map((c) => c.id));
-    return { products, cats, merchants };
+    return { products, cats, merchants, hideCats: !!settings?.hideHomeCats };
   });
   // "more products": next pages of the newest products (from the cached catalogue — no extra Firebase reads)
   const [more, setMore] = useState<{ items: Product[]; cursor: Cursor; has: boolean; busy: boolean }>({ items: [], cursor: null, has: true, busy: false });
@@ -44,7 +44,7 @@ export default function Home() {
       <HeroSlider />
 
       {/* main categories grid */}
-      {cats.length > 0 && (
+      {cats.length > 0 && !data?.hideCats && (
         <section className="sec">
           <div className="sec-h"><h2>أقسام رئيسية</h2><Link href="/categories">عرض الكل</Link></div>
           <Rail auto={2800}>
