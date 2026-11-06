@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { applyStudio, enhanceMany, studioPreview } from "@/lib/enhance";
@@ -19,8 +19,9 @@ type TgText = string | { type?: string; text?: string };
 type TgMsg = { id: number; type: string; date?: string; date_unixtime?: string; text?: TgText | TgText[]; photo?: string; file?: string; mime_type?: string; media_type?: string };
 type Row = { key: string; text: string; photos: string[]; videos: string[]; name: string; price: string; moq: string; on: boolean; state?: "ok" | "err" | "busy"; note?: string;
   /* from al3ataba-import.json: category per product, supplier cost per piece, pieces per carton */
-  cat?: string; icon?: string; pack?: number; desc?: string };
-type Manifest = { format: string; supplier?: string; items: { key: string; name: string; description: string; category: string; icon?: string; cost: number; pack: number; photos: string[]; videos: string[] }[] };
+  cat?: string; icon?: string; pack?: number; desc?: string;
+  frames?: string[]; replace?: boolean; pid?: string /* already on the site → update it instead of adding */ };
+type Manifest = { format: string; supplier?: string; items: { key: string; name: string; description: string; category: string; icon?: string; cost: number; pack: number; photos: string[]; videos: string[]; frames?: string[]; replace?: boolean }[] };
 
 const UNITS = ["قطعة", "دستة", "كرتونة", "طقم", "علبة", "كيلو", "متر"];
 const plain = (t: TgMsg["text"]): string => (Array.isArray(t) ? t.map((x) => (typeof x === "string" ? x : x.text || "")).join("") : typeof t === "string" ? t : t?.text || "");
@@ -89,7 +90,8 @@ export default function ImportTelegram() {
 
   const findFile = (path: string) => {
     const name = path.split("/").pop() || path;
-    return files.get(path) || Array.from(files.entries()).find(([k]) => k.endsWith("/" + path) || k.endsWith("/" + name))?.[1];
+    const all = Array.from(files.entries());
+    return files.get(path) || all.find(([k]) => k.endsWith("/" + path))?.[1] || (path.includes("/") && path.split("/").length > 2 ? undefined : all.find(([k]) => k.endsWith("/" + name))?.[1]);
   };
   const preview = useMemo(() => {
     const m = new Map<string, string>();
@@ -113,11 +115,11 @@ export default function ImportTelegram() {
     if (prep) {
       try {
         const d = JSON.parse(await prep.text()) as Manifest;
-        let r: Row[] = d.items.map((x) => ({ key: x.key, text: x.description, desc: x.description, photos: x.photos, videos: x.videos, name: x.name, price: String(x.cost), moq: String(x.pack), on: true, cat: x.category, icon: x.icon, pack: x.pack }));
+        let r: Row[] = d.items.map((x) => ({ key: x.key, text: x.description, desc: x.description, photos: x.photos, videos: x.videos, frames: x.frames, replace: x.replace, name: x.name, price: String(x.cost), moq: String(x.pack), on: true, cat: x.category, icon: x.icon, pack: x.pack }));
         try {
           const old = await getDocs(query(collection(dbI(), "products"), where("source", "==", "telegram")));
-          const seen = new Set(old.docs.map((x) => x.get("sourceId") as string));
-          r = r.map((x) => (seen.has(x.key) ? { ...x, on: false, state: "ok" as const, note: "" } : x));
+          const ids = new Map(old.docs.map((x) => [x.get("sourceId") as string, x.id]));
+          r = r.map((x) => (ids.has(x.key) ? { ...x, pid: ids.get(x.key), note: "موجود · هيتحدّث" } : x));
         } catch { /* best-effort */ }
         setFiles(map); setRows(r); setMan({ supplier: d.supplier || "" }); setAiCover(false); setAutoPolish(false);
         return;
@@ -175,22 +177,34 @@ export default function ImportTelegram() {
       upd(r.key, { state: "busy", note: "" });
       try {
         const images: string[] = [], videos: string[] = [];
-        for (const p of r.photos) { const f = findFile(p); if (f) images.push(await uploadImage(f, user.uid, "products")); }
-        for (const p of r.videos) {
+        const media = !r.pid || r.replace; // existing product with the same photos → keep its media
+        if (media && r.frames) {
+          for (const p of [...r.photos, ...r.frames]) { const f = findFile(p); if (f) images.push(await uploadImage(f, user.uid, "products")); }
+          for (const p of r.videos) { const f = findFile(p); if (f) try { videos.push(await uploadVideo(f)); } catch { /* too big */ } }
+        } else if (media) for (const p of r.photos) { const f = findFile(p); if (f) images.push(await uploadImage(f, user.uid, "products")); }
+        if (media && !r.frames) for (const p of r.videos) {
           const f = findFile(p); if (!f) continue;
           if (images.length < 2) for (const fr of await bestFrames(f, images.length ? 1 : 2)) images.push(await uploadImage(fr, user.uid, "products"));
           try { videos.push(await uploadVideo(f)); } catch { /* too big → pictures only */ }
         }
-        if (!images.length) throw new Error("no images");
+        if (media && !images.length) throw new Error("no images");
         const name = r.name.trim();
         const c = await catFor(r);
-        const pack = man && r.pack && r.pack > 1 ? r.pack : 0;
-        // supplier price per piece → selling tiers from the site rules; tier "1, 5…" means cartons when sold by the carton
-        const mt = pack ? (tiersFromRules(price, rules).rule?.tiers ?? []).map((t) => ({ min: Math.max(1, t.min) * pack, pct: t.pct })) : [];
-        const tiers = pack ? tiersFromRules(price, rules.map((x) => ({ ...x, tiers: x.tiers.map((t) => ({ min: Math.max(1, t.min) * pack, pct: t.pct })) }))).tiers : [{ min: q, price }];
-        const extra = man ? { basePrices: [price], markupTiers: mt, packSize: pack || null, ...(supplierId ? { supplierId } : {}) } : {};
+        // supplier price per piece → selling tiers from the site rules (the supplier's carton count is its own wholesale minimum, not ours)
+        const pr = man ? tiersFromRules(price, rules) : null;
+        const tiers = pr?.tiers.length ? pr.tiers : [{ min: q, price }];
+        const minQ = man ? Math.max(1, tiers[0].min) : q;
+        const extra = man ? { basePrices: [price], markupTiers: pr?.rule?.tiers ?? [], ...(supplierId ? { supplierId } : {}) } : {};
+        if (r.pid) {
+          await updateDoc(doc(dbI(), "products", r.pid), {
+            name, description: (r.desc ?? r.text).trim(), unit: "قطعة", moq: minQ, tiers, ...extra, packSize: deleteField(),
+            ...(media ? { images, media: [...images, ...videos], videos: videos.length ? videos : deleteField() } : {}),
+            keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
+          });
+          upd(r.key, { state: "ok", note: "" }); setDone((d) => d + 1); continue;
+        }
         await addDoc(collection(dbI(), "products"), {
-          name, description: (r.desc ?? r.text).trim(), categoryId: c.id, categoryName: c.name, unit: man ? "قطعة" : unit, moq: pack || q,
+          name, description: (r.desc ?? r.text).trim(), categoryId: c.id, categoryName: c.name, unit: man ? "قطعة" : unit, moq: minQ,
           tiers, ...extra, governorate: m.governorate || "القاهرة", images, media: [...images, ...videos], ...(videos.length ? { videos } : {}), colors: [], specs: [],
           cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
@@ -279,12 +293,12 @@ export default function ImportTelegram() {
               <input className="in" value={r.name} placeholder="اسم المنتج" onChange={(e) => upd(r.key, { name: e.target.value })} disabled={r.state === "ok"} />
               <div className="row">
                 <input className="in" inputMode="decimal" value={r.price} placeholder={man ? "سعر القطعة من المورد" : "السعر ج.م"} title={man ? "سعر القطعة من المورد (البيع بيتحسب بقواعد التسعير)" : undefined} onChange={(e) => upd(r.key, { price: e.target.value })} disabled={r.state === "ok"} />
-                <input className="in" inputMode="numeric" value={r.moq} placeholder={`أقل كمية (${moq})`} onChange={(e) => upd(r.key, { moq: e.target.value })} disabled={r.state === "ok"} />
+                <input className="in" inputMode="numeric" value={r.moq} placeholder={man ? "كمية المورد (للعلم)" : `أقل كمية (${moq})`} onChange={(e) => upd(r.key, { moq: e.target.value })} disabled={r.state === "ok"} />
               </div>
-              {r.cat && <small className="mu"><i className="ph ph-tag" /> {r.cat.startsWith("id:") ? "إكسسوارات موبايل" : r.cat} · الكرتونة {r.pack} قطعة</small>}
+              {r.cat && <small className="mu"><i className="ph ph-tag" /> {r.cat.startsWith("id:") ? "إكسسوارات موبايل" : r.cat} · سعر البيع بقواعد التسعير</small>}
               {r.text && <small style={{ whiteSpace: "pre-wrap", maxHeight: 64, overflow: "hidden" }}>{r.text}</small>}
             </div>
-            {r.state === "ok" ? <span className="bd v">موجود على الموقع</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : null}
+            {r.state === "ok" ? <span className="bd v">{r.pid ? "اتحدّث ✓" : "موجود على الموقع"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : r.pid ? <span className="bd w">موجود · هيتحدّث</span> : null}
           </div>
         ))}
         {rows.length > 500 && <div className="alert">بيظهر أول 500 بوست بس. استورد دول، وبعدين اختار المجلد تاني وشيل علامة اللي اتضافوا.</div>}
