@@ -23,6 +23,8 @@ export default function AdminProducts() {
   }, []);
   const [f, setF] = useState("all");
   const [q, setQ] = useState("");
+  const [order, setOrder] = useState<"new" | "old">(() => { try { return localStorage.getItem("adm-order") === "old" ? "old" : "new"; } catch { return "new"; } });
+  const pickOrder = (o: "new" | "old") => { setOrder(o); try { localStorage.setItem("adm-order", o); } catch { /* ignore */ } };
   const set = async (p: Product, status: string) => { await updateDoc(doc(dbI(), "products", p.id), { status, ...(status === "active" && p.status === "pending" ? { reviewed: true } : {}) }); reload(); touchCatalog(); };
   // "تم المراجعة" — toggled locally so the list doesn't reload for every click
   const [revOver, setRevOver] = useState<Record<string, boolean>>({});
@@ -128,7 +130,8 @@ export default function AdminProducts() {
   const revDone = (data ?? []).filter(isRev).length;
   const isLow = (p: Product) => typeof p.stock === "number" && p.stock < 100;
   const lowN = (data ?? []).filter((p) => p.status === "active" && isLow(p)).length;
-  const list = (data ?? []).filter((p) => (f === "all" || (f === "low" ? p.status === "active" && isLow(p) : f === "noimg" ? !p.studio : f === "notext" ? !p.aiCopy : p.status === f)) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
+  const list0 = (data ?? []).filter((p) => (f === "all" || (f === "low" ? p.status === "active" && isLow(p) : f === "noimg" ? !p.studio : f === "notext" ? !p.aiCopy : p.status === f)) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
+  const list = order === "old" ? [...list0].reverse() : list0; // data is newest first
   return (
     <>
       <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><button className="btn o" disabled={hiding} onClick={hideAll}><i className="ph ph-eye-slash" />{hiding ? "جاري الإخفاء…" : "إخفاء الكل"}</button><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
@@ -162,6 +165,7 @@ export default function AdminProducts() {
         <button className={`chip ${rf === "todo" ? "on" : ""}`} onClick={() => setRf(rf === "todo" ? "" : "todo")}><i className="ph ph-circle-dashed" />لسه ماتراجعش ({(data?.length ?? 0) - revDone})</button>
         <button className={`chip ${rf === "done" ? "on" : ""}`} onClick={() => setRf(rf === "done" ? "" : "done")}><i className="ph ph-check-circle" />تم مراجعته ({revDone})</button>
         <input className="in" style={{ maxWidth: 220 }} placeholder="بحث بالاسم" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="in" style={{ maxWidth: 190 }} value={order} onChange={(e) => pickOrder(e.target.value as "new" | "old")} aria-label="الترتيب"><option value="new">الأحدث أولاً</option><option value="old">الأقدم أولاً</option></select>
         <select className="in" style={{ maxWidth: 200 }} value={sf} onChange={(e) => setSf(e.target.value)} aria-label="المورد">
           <option value="">كل الموردين</option><option value="__none">من غير مورد</option>
           {sup.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
