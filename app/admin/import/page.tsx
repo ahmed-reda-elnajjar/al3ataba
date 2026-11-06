@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { addDoc, collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, Timestamp, updateDoc, where } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useApp } from "@/lib/providers";
 import { applyStudio, enhanceMany, studioPreview } from "@/lib/enhance";
@@ -20,8 +20,8 @@ type TgMsg = { id: number; type: string; date?: string; date_unixtime?: string; 
 type Row = { key: string; text: string; photos: string[]; videos: string[]; name: string; price: string; moq: string; on: boolean; state?: "ok" | "err" | "busy"; note?: string;
   /* from al3ataba-import.json: category per product, supplier cost per piece, pieces per carton */
   cat?: string; icon?: string; pack?: number; desc?: string;
-  frames?: string[]; replace?: boolean; pid?: string /* already on the site → update it instead of adding */ };
-type Manifest = { format: string; supplier?: string; items: { key: string; name: string; description: string; category: string; icon?: string; cost: number; pack: number; photos: string[]; videos: string[]; frames?: string[]; replace?: boolean }[] };
+  frames?: string[]; replace?: boolean; postedAt?: string; pid?: string /* already on the site → update it instead of adding */ };
+type Manifest = { format: string; supplier?: string; items: { key: string; name: string; description: string; category: string; icon?: string; cost: number; pack: number; photos: string[]; videos: string[]; frames?: string[]; replace?: boolean; postedAt?: string }[] };
 
 const UNITS = ["قطعة", "دستة", "كرتونة", "طقم", "علبة", "كيلو", "متر"];
 const plain = (t: TgMsg["text"]): string => (Array.isArray(t) ? t.map((x) => (typeof x === "string" ? x : x.text || "")).join("") : typeof t === "string" ? t : t?.text || "");
@@ -115,7 +115,7 @@ export default function ImportTelegram() {
     if (prep) {
       try {
         const d = JSON.parse(await prep.text()) as Manifest;
-        let r: Row[] = d.items.map((x) => ({ key: x.key, text: x.description, desc: x.description, photos: x.photos, videos: x.videos, frames: x.frames, replace: x.replace, name: x.name, price: String(x.cost), moq: String(x.pack), on: true, cat: x.category, icon: x.icon, pack: x.pack }));
+        let r: Row[] = d.items.map((x) => ({ key: x.key, text: x.description, desc: x.description, photos: x.photos, videos: x.videos, frames: x.frames, replace: x.replace, postedAt: x.postedAt, name: x.name, price: String(x.cost), moq: String(x.pack), on: true, cat: x.category, icon: x.icon, pack: x.pack }));
         try {
           const old = await getDocs(query(collection(dbI(), "products"), where("source", "==", "telegram")));
           const ids = new Map(old.docs.map((x) => [x.get("sourceId") as string, x.id]));
@@ -190,14 +190,18 @@ export default function ImportTelegram() {
         if (media && !images.length) throw new Error("no images");
         const name = r.name.trim();
         const c = await catFor(r);
-        // supplier price per piece → selling tiers from the site rules (the supplier's carton count is its own wholesale minimum, not ours)
-        const pr = man ? tiersFromRules(price, rules) : null;
+        // supplier price per piece → selling tiers from the site rules. The supplier's carton count is the wholesale minimum:
+        // tier "1" = one carton, tier "5" = five cartons, so orders go in multiples of the carton (pricing.ts quantity steps).
+        const pack = man ? q : 1; // the row's quantity field = supplier carton (editable)
+        const scaled = rules.map((x) => ({ ...x, tiers: x.tiers.map((t) => ({ min: Math.max(1, t.min) * pack, pct: t.pct })) }));
+        const pr = man ? tiersFromRules(price, scaled) : null;
         const tiers = pr?.tiers.length ? pr.tiers : [{ min: q, price }];
-        const minQ = man ? Math.max(1, tiers[0].min) : q;
-        const extra = man ? { basePrices: [price], markupTiers: pr?.rule?.tiers ?? [], ...(supplierId ? { supplierId } : {}) } : {};
+        const minQ = man ? pack : q;
+        const posted = r.postedAt && !isNaN(Date.parse(r.postedAt)) ? Timestamp.fromDate(new Date(r.postedAt)) : null; // order on the site = supplier's post date
+        const extra = man ? { basePrices: [price], markupTiers: pr?.rule?.tiers ?? [], ...(supplierId ? { supplierId } : {}), ...(posted ? { postedAt: posted } : {}) } : {};
         if (r.pid) {
           await updateDoc(doc(dbI(), "products", r.pid), {
-            name, description: (r.desc ?? r.text).trim(), unit: "قطعة", moq: minQ, tiers, ...extra, packSize: deleteField(),
+            name, description: (r.desc ?? r.text).trim(), unit: "قطعة", moq: minQ, tiers, ...extra, packSize: deleteField(), ...(posted ? { createdAt: posted } : {}),
             ...(media ? { images, media: [...images, ...videos], videos: videos.length ? videos : deleteField() } : {}),
             keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
           });
@@ -208,7 +212,7 @@ export default function ImportTelegram() {
           tiers, ...extra, governorate: m.governorate || "القاهرة", images, media: [...images, ...videos], ...(videos.length ? { videos } : {}), colors: [], specs: [],
           cod: true, madeInEgypt: false, logoPrint: false, status: "pending", // reviewed by admin before going live
           keywords: Array.from(new Set(`${name} ${c.name}`.toLowerCase().split(/\s+/).filter((w) => w.length > 1))),
-          merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "telegram", sourceId: r.key, createdAt: serverTimestamp(),
+          merchantId: m.id, merchantName: m.name, ownerUid: user.uid, source: "telegram", sourceId: r.key, createdAt: posted ?? serverTimestamp(),
         }).then((ref) => { newIds.push(ref.id); });
         upd(r.key, { state: "ok" }); setDone((d) => d + 1);
       } catch { upd(r.key, { state: "err", note: images0(r) ? "فشل الحفظ" : "الصورة مش موجودة في المجلد" }); }
@@ -293,9 +297,9 @@ export default function ImportTelegram() {
               <input className="in" value={r.name} placeholder="اسم المنتج" onChange={(e) => upd(r.key, { name: e.target.value })} disabled={r.state === "ok"} />
               <div className="row">
                 <input className="in" inputMode="decimal" value={r.price} placeholder={man ? "سعر القطعة من المورد" : "السعر ج.م"} title={man ? "سعر القطعة من المورد (البيع بيتحسب بقواعد التسعير)" : undefined} onChange={(e) => upd(r.key, { price: e.target.value })} disabled={r.state === "ok"} />
-                <input className="in" inputMode="numeric" value={r.moq} placeholder={man ? "كمية المورد (للعلم)" : `أقل كمية (${moq})`} onChange={(e) => upd(r.key, { moq: e.target.value })} disabled={r.state === "ok"} />
+                <input className="in" inputMode="numeric" value={r.moq} placeholder={man ? "أقل طلب جملة" : `أقل كمية (${moq})`} onChange={(e) => upd(r.key, { moq: e.target.value })} disabled={r.state === "ok"} />
               </div>
-              {r.cat && <small className="mu"><i className="ph ph-tag" /> {r.cat.startsWith("id:") ? "إكسسوارات موبايل" : r.cat} · سعر البيع بقواعد التسعير</small>}
+              {r.cat && <small className="mu"><i className="ph ph-tag" /> {r.cat.startsWith("id:") ? "إكسسوارات موبايل" : r.cat} · أقل طلب {r.pack} قطعة ومضاعفاتها{r.postedAt ? ` · نزل ${r.postedAt.slice(0, 10)}` : ""}</small>}
               {r.text && <small style={{ whiteSpace: "pre-wrap", maxHeight: 64, overflow: "hidden" }}>{r.text}</small>}
             </div>
             {r.state === "ok" ? <span className="bd v">{r.pid ? "اتحدّث ✓" : "موجود على الموقع"}</span> : r.state === "busy" ? <span className="bd w">جاري…</span> : r.state === "err" ? <span className="bd e">{r.note}</span> : r.pid ? <span className="bd w">موجود · هيتحدّث</span> : null}
