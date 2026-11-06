@@ -3,7 +3,7 @@ import { touchCatalog } from "@/lib/catalogClient";
 import { sized } from "@/lib/media";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { arrayRemove, arrayUnion, collection, deleteDoc, doc, getDocs, limit, query, updateDoc, writeBatch } from "firebase/firestore";
+import { arrayRemove, arrayUnion, collection, deleteDoc, doc, getDocs, limit, query, updateDoc, where, writeBatch } from "firebase/firestore";
 import { dbI } from "@/lib/firebase";
 import { useAsync } from "@/lib/hooks";
 import { listCategories, withId } from "@/lib/store";
@@ -111,13 +111,28 @@ export default function AdminProducts() {
     setRmsg(action === "active" ? `اتنشر ${ids.length} منتج ✓` : action === "hidden" ? `اتخفى ${ids.length} منتج` : `اتحذف ${ids.length} منتج`);
     setSel([]); reload(); touchCatalog();
   };
+  // hides every published product in the database (not only the 500 loaded on this page)
+  const [hiding, setHiding] = useState(false);
+  const hideAll = async () => {
+    setHiding(true);
+    try {
+      const s = await getDocs(query(collection(dbI(), "products"), where("status", "==", "active")));
+      if (!s.size) { setRmsg("مفيش منتجات منشورة."); return; }
+      if (!confirm(`إخفاء كل المنتجات المنشورة (${s.size} منتج)؟ مش هتظهر للعملاء لحد ما تنشرها تاني.`)) return;
+      let b = writeBatch(dbI()), k = 0;
+      for (const d of s.docs) { b.update(d.ref, { status: "hidden" }); if (++k % 400 === 0) { await b.commit(); b = writeBatch(dbI()); } }
+      await b.commit();
+      setRmsg(`اتخفى ${s.size} منتج ✓ (تقدر ترجعهم من "مخفي" ← علّم الكل ← نشر المتعلّم)`); setSel([]); reload(); touchCatalog();
+    } catch { setRmsg("حصلت مشكلة أثناء الإخفاء، جرّب تاني."); } finally { setHiding(false); }
+  };
   const revDone = (data ?? []).filter(isRev).length;
   const isLow = (p: Product) => typeof p.stock === "number" && p.stock < 100;
   const lowN = (data ?? []).filter((p) => p.status === "active" && isLow(p)).length;
   const list = (data ?? []).filter((p) => (f === "all" || (f === "low" ? p.status === "active" && isLow(p) : f === "noimg" ? !p.studio : f === "notext" ? !p.aiCopy : p.status === f)) && (!rf || (rf === "done") === isRev(p)) && (!q || p.name.includes(q)) && (!sf || (sf === "__none" ? !p.supplierId : p.supplierId === sf)));
   return (
     <>
-      <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
+      <div className="row wrap"><b className="sp" style={{ fontSize: 18 }}>المنتجات ({data?.length ?? 0})</b><button className="btn o" disabled={hiding} onClick={hideAll}><i className="ph ph-eye-slash" />{hiding ? "جاري الإخفاء…" : "إخفاء الكل"}</button><Link className="btn" href="/admin/products/new">+ إضافة منتج</Link></div>
+      {rmsg && !(f === "pending" || f === "noimg" || f === "notext" || f === "low" || sel.length > 0) && <div className="alert">{rmsg}</div>}
       {pendingN > 0 && f !== "pending" && (
         <div className="alert row wrap" style={{ borderColor: "var(--gold)" }}>
           <i className="ph ph-hourglass" style={{ color: "var(--gold)", fontSize: 22 }} />
