@@ -3,9 +3,10 @@ import { treeList } from "@/lib/cats";
 import type { Category } from "@/lib/types";
 import { touchCatalog } from "@/lib/catalogClient";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { dbI } from "@/lib/firebase";
+import { authI, dbI } from "@/lib/firebase";
+import { enhanceImage, rewriteText, studioPreview } from "@/lib/enhance";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
@@ -83,6 +84,43 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
   const [up, setUp] = useState(false);
   const imgDnd = useDragSort<string>(media, (u) => u, (next) => setMedia(next));
   const [cropping, setCropping] = useState<string | null>(null);
+  const [view, setView] = useState<number | null>(null); // big viewer for photos and videos
+  // improvement tools right here: changes land in the form, nothing is saved until "حفظ"
+  const [tool, setTool] = useState(""); const [toolMsg, setToolMsg] = useState("");
+  const [undo, setUndo] = useState<{ name: string; description: string; media: string[] }[]>([]);
+  const [aiPic, setAiPic] = useState("");
+  const snap = () => setUndo((u) => [...u.slice(-9), { name, description, media }]);
+  const runTool = async (k: string, fn: () => Promise<string>) => {
+    setTool(k); setToolMsg("");
+    try { setToolMsg(await fn()); } catch (e) { setToolMsg(`مانجحش: ${(e as Error).message || "حاول تاني"}`); } finally { setTool(""); }
+  };
+  const curUser = () => { const u = authI().currentUser; if (!u) throw new Error("سجّل دخول الأول"); return u; };
+  const toolText = () => runTool("text", async () => {
+    const r = await rewriteText(curUser(), [{ ...(p ?? ({} as Product)), id: p?.id || "new", name, description, categoryName: cats.find((c) => c.id === categoryId)?.name || "" } as Product], true);
+    const it = r.items[0]; if (!it?.description) throw new Error("مارجعش وصف");
+    snap(); if (it.name) setName(it.name); setDescription(it.description);
+    return `الاسم والوصف اتحسنوا${r.provider ? ` (${r.provider})` : ""} — راجعهم ودوس حفظ`;
+  });
+  const toolPhotos = (all: boolean) => runTool(all ? "all" : "cover", async () => {
+    const targets = (all ? media : media.slice(0, 1)).filter((u) => !isVideoUrl(u));
+    if (!targets.length) throw new Error("مفيش صورة (الرئيسي فيديو)");
+    const map: Record<string, string> = {};
+    for (const u of targets) map[u] = await enhanceImage(u);
+    snap(); setMedia((xs) => xs.map((x) => map[x] || x));
+    return `${targets.length} صورة اتحسنت — دوس حفظ`;
+  });
+  const toolAi = () => runTool("ai", async () => {
+    const src = media.find((u) => !isVideoUrl(u)); if (!src) throw new Error("محتاج صورة واحدة على الأقل");
+    const res = await studioPreview(curUser(), src, "gemini", name, "auto", "", "white", undefined, p ?? undefined);
+    if (!res.image) throw new Error("مارجعش صورة");
+    setAiPic(res.image);
+    return res.check && !res.check.ok ? `اتعملت صورة بس ممكن تكون مختلفة عن المنتج: ${res.check.issues}` : "الصورة البيضا جاهزة — شوفها وقرر";
+  });
+  useEffect(() => {
+    if (view === null) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setView(null); if (e.key === "ArrowLeft") setView((v) => (v === null ? v : Math.min(media.length - 1, v + 1))); if (e.key === "ArrowRight") setView((v) => (v === null ? v : Math.max(0, v - 1))); };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [view, media.length]);
   const saveCrop = async (f: File) => {
     const old = cropping;
     const url = await uploadImage(f, user, "products");
@@ -166,12 +204,35 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     <div className="card col" style={{ gap: 16 }}>
       <h3>{p ? "تعديل المنتج" : "إضافة منتج جديد"}</h3>
       {images.some(isLowQuality) && <div className="alert w">الصور اتحفظت بجودة منخفضة لأن مفيش مكان تخزين صور مفعّل (Firebase Storage أو Cloudinary). فعّل واحد منهم والصور هتترفع بجودتها الأصلية.</div>}
+      {p && (
+        <div className="card col" style={{ gap: 8, background: "var(--bg2, #faf7f0)" }}>
+          <b><i className="ph ph-magic-wand" style={{ color: "var(--gold)" }} /> أدوات التحسين</b>
+          <div className="row wrap g4">
+            <button type="button" className="btn gd sm2" disabled={!!tool} onClick={toolText}><i className="ph ph-text-aa" />{tool === "text" ? "جاري…" : "حسّن الاسم والوصف"}</button>
+            <button type="button" className="btn o sm2" disabled={!!tool || !media.length} onClick={() => toolPhotos(false)}><i className="ph ph-image" />{tool === "cover" ? "جاري…" : "حسّن الصورة الرئيسية"}</button>
+            <button type="button" className="btn o sm2" disabled={!!tool || !media.length} onClick={() => toolPhotos(true)}><i className="ph ph-images" />{tool === "all" ? "جاري…" : "حسّن كل الصور"}</button>
+            <button type="button" className="btn o sm2" disabled={!!tool || !media.length} onClick={toolAi}><i className="ph ph-sparkle" />{tool === "ai" ? "جاري…" : "صورة بخلفية بيضا (ذكاء اصطناعي)"}</button>
+            {undo.length > 0 && <button type="button" className="btn o sm2" disabled={!!tool} onClick={() => { const last = undo[undo.length - 1]; setName(last.name); setDescription(last.description); setMedia(last.media); setUndo(undo.slice(0, -1)); setToolMsg("رجعت للي قبلها"); }}><i className="ph ph-arrow-counter-clockwise" />تراجع</button>}
+            <a className="btn o sm2" href={`/admin/enhance?ids=${p.id}`} target="_blank" rel="noreferrer"><i className="ph ph-arrow-square-out" />كل أدوات التحسين</a>
+          </div>
+          {toolMsg && <small className={toolMsg.startsWith("مانجحش") ? "err" : "ok"}>{toolMsg}</small>}
+          {aiPic && (
+            <div className="row wrap" style={{ gap: 10, alignItems: "center" }}>
+              <img src={aiPic} alt="" style={{ width: 120, height: 120, objectFit: "contain", background: "#fff", borderRadius: 10, border: "1px solid var(--bd)" }} />
+              <button type="button" className="btn sm2" onClick={() => { snap(); setMedia((xs) => [aiPic, ...xs.filter((x) => x !== aiPic)]); setAiPic(""); setToolMsg("اتحطت كصورة رئيسية — دوس حفظ"); }}><i className="ph ph-star" />اجعلها الرئيسية</button>
+              <button type="button" className="btn o sm2" onClick={() => { snap(); setMedia((xs) => [...xs, aiPic]); setAiPic(""); setToolMsg("اتضافت للصور — دوس حفظ"); }}>أضفها للصور</button>
+              <button type="button" className="btn o sm2" onClick={() => setAiPic("")}>مش عايزها</button>
+            </div>
+          )}
+        </div>
+      )}
       <div className="fld"><label>صور وفيديوهات المنتج <small>— الأول (صورة أو فيديو) هو الرئيسي وبيظهر في الكارت. اسحب الصورة أو استخدم الأسهم لترتيبها، والنجمة تخليها الرئيسية.</small></label>
         {images.length === 0 && videos.length === 0 && <label className="drop" style={{ minHeight: 150 }}><i className="ph ph-camera" /><b style={{ color: "var(--pd)" }}>{up ? upMsg || "جاري الرفع…" : "إضافة صور وفيديوهات المنتج"}</b><small>حتى 8 صور و3 فيديوهات (الفيديو لحد 100 ميجا)</small><input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         <div className="thumbs">
           {imgDnd.list.map((u, i) => (
             <div key={u.slice(-40)} className={`t sortable${isVideoUrl(u) ? " vid" : ""}`} {...imgDnd.item(u)}>
-              {isVideoUrl(u) ? <video src={u} poster={videoPoster(u)} muted playsInline preload="metadata" {...imgDnd.handle(u)} /> : <img src={sized(u, 240)} alt="" draggable={false} {...imgDnd.handle(u)} />}
+              {isVideoUrl(u) ? <video src={`${u}#t=0.8`} muted playsInline preload="metadata" onClick={() => setView(i)} {...imgDnd.handle(u)} /> : <img src={sized(u, 240)} alt="" draggable={false} onClick={() => setView(i)} {...imgDnd.handle(u)} />}
+              {isVideoUrl(u) && <button type="button" aria-label="تشغيل الفيديو" title="تشغيل الفيديو" onClick={() => setView(i)} style={{ inset: "50% auto auto 50%", transform: "translate(-50%,-50%)", width: 40, height: 40, borderRadius: "50%", background: "#000a", color: "#fff", display: "grid", placeItems: "center" }}><i className="ph ph-play" style={{ fontSize: 20 }} /></button>}
               {i === 0 ? <span className="main">الرئيسية</span> : isVideoUrl(u) ? <span className="main" style={{ background: "var(--pd)" }}><i className="ph ph-play" style={{ fontSize: 11 }} /> فيديو</span> : null}
               <button type="button" aria-label="حذف" onClick={() => setMedia(media.filter((x) => x !== u))}>×</button>
               {!isVideoUrl(u) && <button type="button" className="cropbtn" aria-label="قص الصورة" title="قص الصورة" onClick={() => setCropping(u)}><i className="ph ph-crop" /></button>}
@@ -184,7 +245,29 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
           ))}
           {(images.length > 0 || videos.length > 0) && (images.length < 8 || videos.length < 3) && <label className="btn o" style={{ width: 104, height: 104, flexDirection: "column", padding: 0, minHeight: 0, whiteSpace: "normal" }}><i className="ph ph-camera-plus" /><small>{up ? "..." : "صورة / فيديو"}</small><input type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { pick(e.target.files); e.target.value = ""; }} /></label>}
         </div>
+        {media.length > 0 && <small className="mu"><i className="ph ph-magnifying-glass-plus" /> اضغط على أي صورة أو فيديو عشان تشوفه كبير.</small>}
       </div>
+      {view !== null && media[view] && (
+        <div role="dialog" aria-label="عرض الصور والفيديو" onClick={() => setView(null)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#000e", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "min(92vw, 900px)", maxHeight: "78vh", display: "grid", placeItems: "center" }}>
+            {isVideoUrl(media[view]) ? <video key={media[view]} src={media[view]} controls autoPlay playsInline style={{ maxWidth: "100%", maxHeight: "78vh", borderRadius: 12, background: "#000" }} />
+              : <img src={media[view]} alt="" style={{ maxWidth: "100%", maxHeight: "78vh", borderRadius: 12, background: "#fff", objectFit: "contain" }} />}
+          </div>
+          <div onClick={(e) => e.stopPropagation()} className="row wrap" style={{ justifyContent: "center", color: "#fff", gap: 8 }}>
+            <button type="button" className="btn o sm2" style={{ background: "#fff" }} disabled={view === 0} onClick={() => setView(view - 1)}><i className="ph ph-caret-right" />السابق</button>
+            <b style={{ minWidth: 70, textAlign: "center" }}>{view + 1} / {media.length}{view === 0 ? " · الرئيسية" : ""}</b>
+            <button type="button" className="btn o sm2" style={{ background: "#fff" }} disabled={view === media.length - 1} onClick={() => setView(view + 1)}>التالي<i className="ph ph-caret-left" /></button>
+            {view > 0 && <button type="button" className="btn gd sm2" onClick={() => { move(view, 0); setView(0); }}><i className="ph ph-star" />اجعلها الرئيسية</button>}
+            <button type="button" className="btn r sm2" onClick={() => { const u = media[view]; setMedia(media.filter((x) => x !== u)); setView(media.length > 1 ? Math.max(0, view - (view === media.length - 1 ? 1 : 0)) : null); }}><i className="ph ph-trash" />حذف</button>
+            <button type="button" className="btn sm2" onClick={() => setView(null)}><i className="ph ph-x" />قفل</button>
+          </div>
+          <div onClick={(e) => e.stopPropagation()} className="row" style={{ gap: 6, overflowX: "auto", maxWidth: "92vw" }}>
+            {media.map((u, i) => <button key={u.slice(-40)} type="button" onClick={() => setView(i)} style={{ all: "unset", cursor: "pointer", width: 56, height: 56, borderRadius: 8, overflow: "hidden", outline: i === view ? "3px solid var(--gold)" : "1px solid #fff4", flex: "none", position: "relative", background: "#222" }}>
+              {isVideoUrl(u) ? <><video src={`${u}#t=0.8`} muted preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} /><i className="ph ph-play" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#fff" }} /></> : <img src={sized(u, 120)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+            </button>)}
+          </div>
+        </div>
+      )}
       <div className="fld"><label>اسم المنتج</label><input className="in" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: كوبايات زجاج 250 مل" /></div>
       <div className="grid" style={{ ["--m" as string]: 1, ["--d" as string]: 3 }}>
         <div className="fld"><label>القسم</label><select className="in" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}><option value="">اختار…</option>{treeList(cats).map((c) => <option key={c.id} value={c.id}>{c.depth ? `— ${c.name}` : c.name}</option>)}</select></div>
@@ -192,8 +275,25 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
         <div className="fld"><label>أقل كمية للطلب</label><input className="in" inputMode="numeric" value={moq} onChange={(e) => setMoq(e.target.value.replace(/\D/g, ""))} /></div>
       </div>
       {categoryId && cats.length > 1 && (
-        <div className="fld"><label>يظهر كمان في أقسام تانية <small>(اختياري — القسم اللي فوق هو الأساسي)</small></label>
-          <div className="row wrap g4">{cats.filter((c) => c.id !== categoryId).map((c) => { const on = extraCats.includes(c.id); return <button key={c.id} type="button" className={`chip${on ? " on" : ""}`} onClick={() => setExtraCats(on ? extraCats.filter((x) => x !== c.id) : [...extraCats, c.id])}>{on && <i className="ph ph-check" />} {c.name}</button>; })}</div>
+        <div className="fld"><label>الأقسام اللي المنتج يظهر فيها <small>(اضغط على القسم عشان يظهر فيه، واضغط تاني عشان تشيله)</small></label>
+          <div className="row wrap g4" style={{ alignItems: "center" }}>
+            <span className="chip on" style={{ background: "var(--pd)", borderColor: "var(--pd)", cursor: "default" }}><i className="ph ph-push-pin" />{cats.find((c) => c.id === categoryId)?.name} (الأساسي)</span>
+            {extraCats.filter((x) => x !== categoryId && cats.some((c) => c.id === x)).map((x) => <span key={x} className="chip on">{cats.find((c) => c.id === x)?.name}<button type="button" className="cx" aria-label="شيل" onClick={() => setExtraCats(extraCats.filter((y) => y !== x))}><i className="ph ph-x" /></button></span>)}
+            {extraCats.length > 0 && <button type="button" className="btn o sm2" onClick={() => setExtraCats([])}>شيل الكل</button>}
+          </div>
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ cursor: "pointer", color: "var(--pd)", fontWeight: 700 }}>اختار أقسام تانية يظهر فيها ({cats.length - 1} قسم)</summary>
+            <div className="col" style={{ gap: 10, marginTop: 10 }}>
+              {treeList(cats).filter((c) => !c.depth).map((top) => {
+                const kids = cats.filter((c) => c.parentId === top.id);
+                const chip = (c: Category, small = false) => { if (c.id === categoryId) return <span key={c.id} className="chip" style={{ opacity: 0.5, cursor: "default", ...(small ? { minHeight: 32, fontSize: 13 } : {}) }}>{c.name} (الأساسي)</span>; const on = extraCats.includes(c.id); return <button key={c.id} type="button" className={`chip${on ? " on" : ""}`} style={small ? { minHeight: 32, fontSize: 13, padding: "0 12px" } : undefined} onClick={() => setExtraCats(on ? extraCats.filter((x) => x !== c.id) : [...extraCats, c.id])}>{on ? <i className="ph ph-check" /> : <i className="ph ph-plus" />} {c.name}</button>; };
+                return <div key={top.id} className="col" style={{ gap: 6 }}>
+                  <div className="row wrap g4">{chip(top)}</div>
+                  {kids.length > 0 && <div className="row wrap g4" style={{ paddingInlineStart: 18, borderInlineStart: "2px solid var(--bd)" }}>{kids.map((k) => chip(k, true))}</div>}
+                </div>;
+              })}
+            </div>
+          </details>
         </div>
       )}
       {unit !== "قطعة" && (
