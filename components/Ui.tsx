@@ -29,7 +29,7 @@ export function ProductCard({ p: raw, verified, showPromo = false }: { p: Produc
     <div className="pc">
       <button className={`ico fav${fav ? " on" : ""}`} aria-label="المفضلة" onClick={() => { if (!fav) track("fav", p); favs.toggle(p.id); }}><i className={`ph${fav ? "-fill" : ""} ph-heart`} /></button>
       <Link href={`/product/${p.id}`} style={{ position: "relative", display: "block" }}>
-        <Img src={coverVideo ? videoPoster(coverVideo) : p.images?.[0]} ic="ph-package" ratio={1} w={420} />
+        <Img src={p.images?.[0] && !isVideoUrl(p.images[0]) ? p.images[0] : coverVideo ? videoPoster(coverVideo) : ""} ic="ph-package" ratio={1} w={420} />
         {coverVideo && <span className="vbadge"><i className="ph ph-play" /></span>}
         {showPromo && p.promo && <span className="pbadge" style={p.promo.color ? { background: p.promo.color } : undefined}><i className="ph-fill ph-tag" />{p.promo.label}</span>}
       </Link>

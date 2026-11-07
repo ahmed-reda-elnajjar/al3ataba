@@ -1,5 +1,6 @@
 "use client";
 import { sized } from "@/lib/media";
+import { isVideoUrl, videoPoster } from "@/lib/img";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /* Swipeable product gallery (scroll-snap) + full-screen viewer. Works with touch, mouse wheel/trackpad, arrows and keyboard. */
@@ -22,22 +23,27 @@ function useSlider(count: number) {
 
 const isVid = (u: string) => u.startsWith("vid:");
 const src = (u: string) => (isVid(u) ? u.slice(4) : u);
-const poster = (u: string) => src(u).replace("/upload/q_auto/", "/upload/so_0/").replace(/\.[a-z0-9]+$/i, ".jpg");
+const posterOf = (u: string) => videoPoster(src(u));
 
 export function Gallery({ images, videos = [], order, children }: { images: string[]; videos?: string[]; order?: string[]; children?: React.ReactNode }) {
-  const media = order?.length ? order.map((u) => (/\/video\/upload\//.test(u) ? "vid:" + u : u)) : [...images, ...videos.map((v) => "vid:" + v)];
+  const media = order?.length ? order.map((u) => (isVideoUrl(u) ? "vid:" + u : u)) : [...images.filter((u) => !isVideoUrl(u)), ...[...videos, ...images.filter(isVideoUrl)].map((v) => "vid:" + v)];
   const list = media.length ? media : [""];
   const main = useSlider(list.length);
   const [open, setOpen] = useState(false);
   // each video keeps its own frame shape (e.g. 9:16 reels) instead of being squeezed into the square box
   const [ratio, setRatio] = useState<Record<number, number>>({});
+  // a video whose saved cover frame is missing shows the product's first photo instead (never a broken "?" box)
+  const [noPoster, setNoPoster] = useState<Record<number, boolean>>({});
+  const firstPhoto = list.find((u) => u && !isVid(u)) || "";
+  const poster = (u: string, k: number) => (noPoster[k] ? firstPhoto : posterOf(u));
   // measure every photo/video (videos via their poster frame — iPhone doesn't load video metadata until play)
   useEffect(() => {
     list.forEach((u, k) => {
       if (!u) return;
       const im = new Image();
       im.onload = () => { if (im.naturalWidth && im.naturalHeight) setRatio((r) => (r[k] ? r : { ...r, [k]: im.naturalWidth / im.naturalHeight })); };
-      im.src = sized(isVid(u) ? poster(u) : u, 1000);
+      if (isVid(u)) im.onerror = () => setNoPoster((x) => ({ ...x, [k]: true }));
+      im.src = sized(isVid(u) ? posterOf(u) : u, 1000);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.join("|")]);
@@ -76,7 +82,7 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
       {children}
       <div className="gsl" ref={main.ref} onScroll={main.onScroll} style={{ aspectRatio: String(curRatio), width: `min(100%, calc(82vh * ${curRatio}))` }}>
         {list.map((u, k) => isVid(u) ? (
-          <div key={k} className="gsl-it vid"><video src={src(u)} poster={sized(poster(u), 1000)} controls playsInline preload="none" onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setRatio((r) => ({ ...r, [k]: v.videoWidth / v.videoHeight })); }} /></div>
+          <div key={k} className="gsl-it vid"><video src={`${src(u)}#t=0.1`} poster={poster(u, k) ? sized(poster(u, k), 1000) : undefined} controls playsInline preload="metadata" onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setRatio((r) => ({ ...r, [k]: v.videoWidth / v.videoHeight })); }} /></div>
         ) : (
           <button type="button" key={k} className="gsl-it" onClick={() => u && setOpen(true)} aria-label="تكبير الصورة">
             {u ? <img src={sized(u, 1000)} alt="" loading={k ? "lazy" : "eager"} draggable={false} /> : <i className="ph ph-package" />}
@@ -94,14 +100,14 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
       {list.length > 1 && (
         <>
           <div className="dots" style={{ marginTop: 10 }}>{list.map((_, k) => <i key={k} className={k === main.i ? "on" : ""} style={{ background: k === main.i ? "var(--gold)" : "var(--bd)" }} />)}</div>
-          <div className="gal">{list.map((u, k) => <button type="button" key={k} className={k === main.i ? "on" : ""} onClick={() => main.go(k)}><span className="img" style={{ aspectRatio: "1" }}><img src={sized(isVid(u) ? poster(u) : u, 160)} alt="" loading="lazy" />{isVid(u) && <i className="ph ph-play-circle gplay" />}</span></button>)}</div>
+          <div className="gal">{list.map((u, k) => <button type="button" key={k} className={k === main.i ? "on" : ""} onClick={() => main.go(k)}><span className="img" style={{ aspectRatio: "1" }}>{isVid(u) && !poster(u, k) ? <video src={`${src(u)}#t=0.1`} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <img src={sized(isVid(u) ? poster(u, k) : u, 160)} alt="" loading="lazy" />}{isVid(u) && <i className="ph ph-play-circle gplay" />}</span></button>)}</div>
         </>
       )}
       {open && (
         <div className="lb" role="dialog" aria-label="عرض الصور">
           <div className="lb-top"><span>{full.i + 1} / {list.length}</span><button type="button" onClick={close} aria-label="إغلاق"><i className="ph ph-x" /></button></div>
           <div className="lb-sl" ref={full.ref} onScroll={full.onScroll}>
-            {list.map((u, k) => <div key={k} className="lb-it">{isVid(u) ? <video src={src(u)} poster={poster(u)} controls playsInline preload="metadata" /> : <img src={u} alt="" draggable={false} />}</div>)}
+            {list.map((u, k) => <div key={k} className="lb-it">{isVid(u) ? <video src={`${src(u)}#t=0.1`} poster={poster(u, k) || undefined} controls playsInline preload="metadata" /> : <img src={u} alt="" draggable={false} />}</div>)}
           </div>
           {list.length > 1 && (
             <>
