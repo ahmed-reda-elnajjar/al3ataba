@@ -48,7 +48,8 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.join("|")]);
   const raw = ratio[main.i] ?? (isVid(list[main.i] || "") ? 9 / 16 : 1);
-  const curRatio = Math.round(Math.min(16 / 9, Math.max(9 / 16, raw)) * 1000) / 1000;
+  // one fixed square frame for every photo and video (no jumping, no giant reels); each item is shown whole inside it
+  const curRatio = raw > 0 ? 1 : 1;
   // the frame width can change with the ratio; keep the current slide aligned
   useEffect(() => { requestAnimationFrame(() => main.go(main.i, false)); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curRatio]);
@@ -80,7 +81,7 @@ export function Gallery({ images, videos = [], order, children }: { images: stri
     <div>
       <div style={{ position: "relative" }}>
       {children}
-      <div className="gsl" ref={main.ref} onScroll={main.onScroll} style={{ aspectRatio: String(curRatio), width: `min(100%, calc(82vh * ${curRatio}))` }}>
+      <div className="gsl" ref={main.ref} onScroll={main.onScroll} style={{ aspectRatio: String(curRatio), width: `min(100%, 62vh)` }}>
         {list.map((u, k) => isVid(u) ? (
           <div key={k} className="gsl-it vid"><video src={`${src(u)}#t=0.1`} poster={poster(u, k) ? sized(poster(u, k), 1000) : undefined} controls playsInline preload="metadata" onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setRatio((r) => ({ ...r, [k]: v.videoWidth / v.videoHeight })); }} /></div>
         ) : (
