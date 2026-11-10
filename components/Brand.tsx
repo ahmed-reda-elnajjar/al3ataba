@@ -1,27 +1,23 @@
 import Link from "next/link";
 
-/* Arch gateway mark (original drawing for العتبة أونلاين). */
+/* Shopping bag with an arch handle and an arch door (original drawing for العتبة · ATABA ONLINE). */
 export function Mark({ size = 40, light = false }: { size?: number; light?: boolean }) {
-  const g = light ? "#f4eee2" : "#0f4535";
-  const inner = light ? "#0a3427" : "#faf7f0";
+  const bag = light ? "#f4eee2" : "#0f4535";
+  const door = light ? "#0a3427" : "#faf7f0";
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M10 56 V31 C10 19 19 10.5 32 6 C45 10.5 54 19 54 31 V56 Z" fill={g} />
-      <path d="M13.5 54 V31.5 C13.5 21.5 21 14 32 10 C43 14 50.5 21.5 50.5 31.5 V54" fill="none" stroke="#c9a66b" strokeWidth="1.4" />
-      <path d="M21 51 V33 C21 26 25.5 21 32 18 C38.5 21 43 26 43 33 V51 Z" fill={inner} />
-      <path d="M28.5 30.5 L32 26 L35.5 30.5 L32 35 Z" fill="#c9a66b" />
-      <rect x="17" y="51" width="30" height="4" rx="1" fill="#c9a66b" />
-      <rect x="11" y="56.5" width="42" height="5" rx="1.5" fill="#b08a4f" />
-      <circle cx="32" cy="3.2" r="1.8" fill="#c9a66b" />
+      <path d="M12 26 H52 L49 56 a4 4 0 0 1 -4 3.5 H19 a4 4 0 0 1 -4 -3.5 Z" fill={bag} />
+      <path d="M22 28 V20 C22 12 26.5 7.5 32 5 C37.5 7.5 42 12 42 20 V28" fill="none" stroke="#c9a66b" strokeWidth="3.6" strokeLinecap="round" />
+      <path d="M25 59.5 V45 C25 40 28 37 32 35 C36 37 39 40 39 45 V59.5 Z" fill={door} />
     </svg>
   );
 }
 
 export function Logo({ light = false, size = 38, href = "/", onClick, className = "" }: { light?: boolean; size?: number; href?: string; onClick?: () => void; className?: string }) {
   return (
-    <Link href={href} className={`logo${light ? " light" : ""}${className ? " " + className : ""}`} onClick={onClick} aria-label="عتبة 3ataba online">
+    <Link href={href} className={`logo${light ? " light" : ""}${className ? " " + className : ""}`} onClick={onClick} aria-label="العتبة Ataba Online">
       <Mark size={size} light={light} />
-      <span className="lt"><b>عتبة</b><small>3ATABA ONLINE</small></span>
+      <span className="lt"><b>العتبة</b><small>ATABA ONLINE</small></span>
     </Link>
   );
 }
@@ -31,8 +27,8 @@ export function LogoBig({ light = false }: { light?: boolean }) {
   return (
     <div className="col" style={{ alignItems: "center", gap: 6 }}>
       <Mark size={86} light={light} />
-      <b style={{ font: "800 36px Alexandria,sans-serif", color: light ? "#fff" : "var(--pd)", lineHeight: 1 }}>عتبة</b>
-      <small style={{ letterSpacing: ".22em", fontWeight: 600, color: light ? "var(--gold2)" : "var(--gold)", fontSize: 11 }}>3ATABA ONLINE</small>
+      <b style={{ font: "800 36px Alexandria,sans-serif", color: light ? "#fff" : "var(--pd)", lineHeight: 1 }}>العتبة</b>
+      <small style={{ letterSpacing: ".22em", fontWeight: 600, color: light ? "var(--gold2)" : "var(--gold)", fontSize: 11 }}>ATABA ONLINE</small>
     </div>
   );
 }
