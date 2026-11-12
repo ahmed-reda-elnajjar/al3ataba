@@ -4,14 +4,36 @@
 export type Provider = { name: string; run: (text: string) => Promise<string> };
 const err = (msg: string, status: number) => Object.assign(new Error(msg), { status });
 
-async function geminiOne(model: string, text: string) {
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Free Gemini models, tried in order: when one is overloaded or out of quota the next takes over. */
+export const GEMINI_FREE = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+
+async function geminiOne(model: string, text: string, again = true): Promise<string> {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ contents: [{ role: "user", parts: [{ text }] }], generationConfig: { temperature: 0.4, responseMimeType: "application/json" } }),
   });
   const j = await r.json().catch(() => ({}));
+  if ((r.status === 503 || r.status === 500) && again) { await wait(2500); return geminiOne(model, text, false); } // "high demand" is temporary
   if (!r.ok) throw err(j?.error?.message || `Gemini HTTP ${r.status}`, r.status);
   return String(j?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "");
+}
+
+/** Groq retires model names often: ask it which chat models this key can use and take the best free one. */
+let groqModel: { id: string; at: number } | null = null;
+async function groqPick(key: string): Promise<string> {
+  if (process.env.GROQ_MODEL) return process.env.GROQ_MODEL;
+  if (groqModel && Date.now() - groqModel.at < 6 * 3600_000) return groqModel.id;
+  const r = await fetch("https://api.groq.com/openai/v1/models", { headers: { Authorization: `Bearer ${key}` } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw err(j?.error?.message || `Groq HTTP ${r.status}`, r.status);
+  const ids = ((j.data || []) as { id: string; active?: boolean }[]).filter((m) => m.active !== false).map((m) => m.id)
+    .filter((id) => !/whisper|guard|tts|speech|embed|vision-preview|compound|allam|safeguard/i.test(id));
+  const rank = [/llama.*(70b|90b|120b)/i, /gpt-oss-120b/i, /llama-?4/i, /qwen/i, /kimi/i, /gpt-oss/i, /llama/i];
+  const id = rank.map((re) => ids.find((x) => re.test(x))).find(Boolean) || ids[0];
+  if (!id) throw err("Groq: no chat model available", 502);
+  groqModel = { id, at: Date.now() };
+  return id;
 }
 /** Any OpenAI-compatible chat API (Groq, xAI Grok, Meta Llama API, OpenRouter…). */
 async function openaiLike(url: string, key: string, model: string, text: string, label: string) {
@@ -79,8 +101,8 @@ export function webProviders(): Provider[] {
 
 export function providers(): Provider[] {
   const e = process.env, list: Provider[] = [];
-  if (e.GEMINI_API_KEY) for (const m of Array.from(new Set([e.GEMINI_MODEL || "gemini-flash-lite-latest", "gemini-flash-latest"]))) list.push({ name: `Gemini (${m})`, run: (t) => geminiOne(m, t) });
-  if (e.GROQ_API_KEY) list.push({ name: "Groq", run: (t) => openaiLike("https://api.groq.com/openai/v1/chat/completions", e.GROQ_API_KEY!, e.GROQ_MODEL || "llama-3.3-70b-versatile", t, "Groq") });
+  if (e.GEMINI_API_KEY) for (const m of Array.from(new Set([...(e.GEMINI_MODEL ? [e.GEMINI_MODEL] : []), ...GEMINI_FREE]))) list.push({ name: `Gemini (${m})`, run: (t) => geminiOne(m, t) });
+  if (e.GROQ_API_KEY) list.push({ name: "Groq", run: async (t) => { try { return await openaiLike("https://api.groq.com/openai/v1/chat/completions", e.GROQ_API_KEY!, await groqPick(e.GROQ_API_KEY!), t, "Groq"); } catch (x) { if (/does not exist|decommission|not found/i.test(String((x as Error).message))) groqModel = null; throw x; } } });
   if (e.XAI_API_KEY) list.push({ name: "Grok", run: (t) => openaiLike("https://api.x.ai/v1/chat/completions", e.XAI_API_KEY!, e.XAI_MODEL || "grok-3-mini", t, "Grok") });
   // Meta's old Llama API (api.llama.com) shut down in July 2026 — its successor is the Meta Model API (api.meta.ai, Muse models).
   const metaKey = e.META_API_KEY || e.LLAMA_API_KEY;
@@ -111,9 +133,9 @@ export async function aiGenerate<T>(text: string, parse: (t: string) => T[], pre
       const st = (e as { status?: number }).status || 500;
       fails.push(`${p.name}: ${String((e as Error).message).slice(0, 120)}`);
       if (st === 429) coolUntil[p.name] = Date.now() + 60_000;             // limit reached → rest a minute
-      else if (st === 401 || st === 403) coolUntil[p.name] = Date.now() + 3600_000; // bad key → skip for an hour
+      else if (st === 401 || st === 403 || st === 402 || /billing|payment|credit/i.test(String((e as Error).message))) coolUntil[p.name] = Date.now() + 3600_000; // bad key / paid plan needed → skip for an hour
     }
   }
-  throw err(`كل مفاتيح الذكاء الاصطناعي وصلت لحدها أو فيها مشكلة — ${fails.join(" | ")}`, 429);
+  throw err(`الخدمات المجانية مشغولة دلوقتي. استنى دقيقة وجرّب تاني. (${fails.map((f) => f.slice(0, 70)).join(" | ")})`, 429);
 }
 

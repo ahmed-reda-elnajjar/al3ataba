@@ -73,7 +73,9 @@ function parse(text: string): Out[] {
 /** Which providers are configured (names only — never the keys). */
 export async function GET(req: Request) {
   if (!(await isAdminToken(req.headers.get("x-firebase-token") || ""))) return Response.json({ error: "unauthorized" }, { status: 401 });
-  return Response.json({ providers: providers().map((p) => p.name), web: webProviders().map((p) => p.name) });
+  // bulk polish starts one worker per name: only 2 Gemini workers (they share one free key), the other models stay as fallbacks
+  const names = providers().map((p) => p.name); const gem = names.filter((n) => n.startsWith("Gemini"));
+  return Response.json({ providers: names.filter((n) => !n.startsWith("Gemini") || gem.indexOf(n) < 2), web: webProviders().map((p) => p.name) });
 }
 
 export async function POST(req: Request) {

@@ -13,7 +13,7 @@ export type VisionOut = {
   best: number[]; boxes: Record<string, [number, number, number, number]>; isProduct: boolean;
 };
 
-const MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.0-flash"];
+const MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
 
 function prompt(caption: string, cats: string[], n: number, hint: string) {
   return `أنت خبير منتجات لمتجر جملة مصري اسمه "العتبة أونلاين". قدامك ${n} صورة لنفس المنتج (صور من المورد ولقطات من فيديو)، مرقمة من 0 لـ ${n - 1} بنفس ترتيب إرسالها.
@@ -57,7 +57,9 @@ export async function POST(req: Request) {
     generationConfig: { temperature: 0.3, responseMimeType: "application/json" },
   });
   let last = "";
-  for (const model of MODELS) {
+  // two rounds: "high demand" errors are temporary, so the whole list is tried again after a short wait
+  for (const model of [...MODELS, "", ...MODELS]) {
+    if (!model) { await new Promise((r) => setTimeout(r, 4000)); continue; }
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { last = j?.error?.message || `HTTP ${r.status}`; continue; } // limit reached / model missing → next model
@@ -78,5 +80,5 @@ export async function POST(req: Request) {
       return Response.json({ ...out, model });
     } catch { last = "رد مش مفهوم"; }
   }
-  return Response.json({ error: last || "Gemini مارجعش" }, { status: 502 });
+  return Response.json({ error: `Gemini المجاني مشغول دلوقتي، استنى دقيقة وجرّب تاني. (${(last || "").slice(0, 90)})` }, { status: 502 });
 }

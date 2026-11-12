@@ -4,7 +4,7 @@
  * product or its box is left alone. Best-effort: on any failure the original picture comes back unchanged. */
 import sharp from "sharp";
 
-const MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.0-flash"];
+const MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
 const PROMPT = `This is a product photo for an online store. Find every piece of text or number that was ADDED ON TOP of the photo afterwards: prices, phone numbers, captions, slogans, shop or page names, watermarks, logos of sellers, stickers/emoji, social media handles, borders with writing.
 Do NOT include writing that is physically printed on the product itself, on its label or on its packaging box.
 Return JSON only: {"boxes":[[ymin,xmin,ymax,xmax], ...]} with coordinates from 0 to 1000, each box tight around one text block. If there is none, return {"boxes":[]}.`;
