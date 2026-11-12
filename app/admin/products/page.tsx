@@ -183,6 +183,7 @@ export default function AdminProducts() {
             <option value="__new">+ مورد جديد…</option>
           </select>
           <button className="btn" onClick={assign} disabled={!sel.length}>ربط</button>
+          <button className="btn r" onClick={() => bulk(sel, "delete")} disabled={!sel.length}><i className="ph ph-trash" />حذف المتعلّم ({sel.length})</button>
         </div>
         {amsg && <span className="ok">{amsg}</span>}
       </div>
