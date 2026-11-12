@@ -33,6 +33,15 @@ export async function analyzeProduct(pics: Blob[], caption: string, categories: 
   }
 }
 
+/** Same as analyzeProduct, for pictures that are already uploaded (URLs). `words` = a few words typed by the admin. */
+export async function analyzeUrls(urls: string[], words: string, categories: string[]): Promise<Vision> {
+  const u = authI().currentUser; if (!u) throw new Error("سجّل دخول الأول");
+  const r = await fetch("/api/ai-vision", { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-token": await u.getIdToken() }, body: JSON.stringify({ images: urls.slice(0, 6), caption: words, categories, hint: words ? "الكلام اللي في نص المورد كتبته الإدارة عن المنتج: اعتمد عليه مع الصور وضمّن كل معلومة فيه في الوصف والمواصفات." : "" }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j as Vision;
+}
+
 /** Square crop around the product box ([ymin,xmin,ymax,xmax] on 0..1000) with a little margin, white outside the photo. */
 export async function cropToBox(f: Blob, box?: [number, number, number, number], max = 1200): Promise<File> {
   const im = await load(f); const W = im.width, H = im.height;

@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { authI, dbI } from "@/lib/firebase";
 import { enhanceImage, rewriteText, studioPreview } from "@/lib/enhance";
+import { analyzeUrls, visionText } from "@/lib/vision";
 import { useApp } from "@/lib/providers";
 import { useAsync } from "@/lib/hooks";
 import { listCategories } from "@/lib/store";
@@ -109,6 +110,22 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     snap(); setMedia((xs) => xs.map((x) => map[x] || x));
     return `${targets.length} صورة اتحسنت — دوس حفظ`;
   });
+  // write name + description + specs + colours from the pictures and a few typed words
+  const [words, setWords] = useState("");
+  const toolVision = () => runTool("vision", async () => {
+    const pics = media.filter((u) => !isVideoUrl(u)).map((u) => (u.startsWith("data:") ? u : sized(u, 1000)));
+    if (!pics.length) throw new Error("ضيف صورة للمنتج الأول");
+    const v = await analyzeUrls(pics, [words.trim(), name.trim()].filter(Boolean).join(" — "), cats.map((c) => c.name));
+    if (!v.description) throw new Error("مارجعش وصف");
+    snap();
+    if (v.name) setName(v.name);
+    setDescription(visionText({ ...v, colors: [] }));
+    if (v.colors.length) setColors((c) => Array.from(new Set([...c, ...v.colors])));
+    if (v.specs.length) setSpecs((x) => (x.some((y) => y.k.trim() && y.v.trim()) ? x : v.specs));
+    const cat = cats.find((c) => c.name.trim() === v.category.trim());
+    if (!categoryId && cat) setCategoryId(cat.id);
+    return `الاسم والوصف${v.colors.length ? " والألوان" : ""}${!categoryId && cat ? " والقسم" : ""} اتكتبوا من الصور — راجعهم ودوس حفظ`;
+  });
   const toolAi = () => runTool("ai", async () => {
     const src = media.find((u) => !isVideoUrl(u)); if (!src) throw new Error("محتاج صورة واحدة على الأقل");
     const res = await studioPreview(curUser(), src, "gemini", name, "auto", "", "white", undefined, p ?? undefined);
@@ -204,16 +221,23 @@ function Inner({ p, cats, back, user, isAdmin, merchant, router }: { p: Product 
     <div className="card col" style={{ gap: 16 }}>
       <h3>{p ? "تعديل المنتج" : "إضافة منتج جديد"}</h3>
       {images.some(isLowQuality) && <div className="alert w">الصور اتحفظت بجودة منخفضة لأن مفيش مكان تخزين صور مفعّل (Firebase Storage أو Cloudinary). فعّل واحد منهم والصور هتترفع بجودتها الأصلية.</div>}
-      {p && (
+      {isAdmin && (
         <div className="card col" style={{ gap: 8, background: "var(--bg2, #faf7f0)" }}>
           <b><i className="ph ph-magic-wand" style={{ color: "var(--gold)" }} /> أدوات التحسين</b>
+          <div className="fld"><label>اكتب كلمتين عن المنتج <small>(اختياري: النوع، المقاس، السعة، الخامة… والذكاء الاصطناعي يكمل من الصور)</small></label>
+            <div className="row wrap g4">
+              <input className="in sp" style={{ minWidth: 220 }} value={words} onChange={(e) => setWords(e.target.value)} placeholder="مثال: زمزمية ستانلس 1 لتر بتحفظ الحرارة 12 ساعة" />
+              <button type="button" className="btn sm2" disabled={!!tool || !media.some((u) => !isVideoUrl(u))} onClick={toolVision}><i className="ph ph-sparkle" />{tool === "vision" ? "بيكتب…" : "اكتب الوصف من الصور"}</button>
+            </div>
+            {!media.some((u) => !isVideoUrl(u)) && <small className="mu">ارفع صورة المنتج تحت الأول، وبعدين دوس الزرار.</small>}
+          </div>
           <div className="row wrap g4">
             <button type="button" className="btn gd sm2" disabled={!!tool} onClick={toolText}><i className="ph ph-text-aa" />{tool === "text" ? "جاري…" : "حسّن الاسم والوصف"}</button>
             <button type="button" className="btn o sm2" disabled={!!tool || !media.length} onClick={() => toolPhotos(false)}><i className="ph ph-image" />{tool === "cover" ? "جاري…" : "حسّن الصورة الرئيسية"}</button>
             <button type="button" className="btn o sm2" disabled={!!tool || !media.length} onClick={() => toolPhotos(true)}><i className="ph ph-images" />{tool === "all" ? "جاري…" : "حسّن كل الصور"}</button>
             <button type="button" className="btn o sm2" disabled={!!tool || !media.length} onClick={toolAi}><i className="ph ph-sparkle" />{tool === "ai" ? "جاري…" : "صورة بخلفية بيضا (ذكاء اصطناعي)"}</button>
             {undo.length > 0 && <button type="button" className="btn o sm2" disabled={!!tool} onClick={() => { const last = undo[undo.length - 1]; setName(last.name); setDescription(last.description); setMedia(last.media); setUndo(undo.slice(0, -1)); setToolMsg("رجعت للي قبلها"); }}><i className="ph ph-arrow-counter-clockwise" />تراجع</button>}
-            <a className="btn o sm2" href={`/admin/enhance?ids=${p.id}`} target="_blank" rel="noreferrer"><i className="ph ph-arrow-square-out" />كل أدوات التحسين</a>
+            {p && <a className="btn o sm2" href={`/admin/enhance?ids=${p.id}`} target="_blank" rel="noreferrer"><i className="ph ph-arrow-square-out" />كل أدوات التحسين</a>}
           </div>
           {toolMsg && <small className={toolMsg.startsWith("مانجحش") ? "err" : "ok"}>{toolMsg}</small>}
           {aiPic && (
