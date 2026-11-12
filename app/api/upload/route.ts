@@ -5,6 +5,7 @@
  *  - JSON {action:"studio", url}            → white-square studio version (admin)
  * Auth: Firebase ID token in "x-firebase-token" (signed-in, not anonymous). */
 import { fetchImage, storeImage, studioImage } from "@/lib/imgServer";
+import { eraseText } from "@/lib/textErase";
 import { hasR2, r2PresignPut, r2Put, rid } from "@/lib/r2";
 import { isAdminToken, userFromToken } from "@/lib/serverAuth";
 import sharp from "sharp";
@@ -40,7 +41,9 @@ export async function POST(req: Request) {
     if (body.action === "fetch" && body.url) return Response.json({ url: await storeImage(await fetchImage(body.url), folderOf(body.folder || "imported"), user.uid) });
     if (body.action === "studio" && body.url) {
       if (!(await isAdminToken(token))) return Response.json({ error: "unauthorized" }, { status: 401 });
-      return Response.json({ url: await studioImage(await fetchImage(body.url), user.uid) });
+      // added text (prices, phones, captions, watermarks) is wiped first; writing printed on the product stays
+      const { image, erased } = await eraseText(await fetchImage(body.url));
+      return Response.json({ url: await studioImage(image, user.uid), erased });
     }
     if (body.action === "video") {
       const ext = /webm/.test(String(body.type)) ? "webm" : /quicktime|mov/.test(String(body.type)) ? "mov" : "mp4";
